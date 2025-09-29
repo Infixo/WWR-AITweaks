@@ -43,6 +43,8 @@ public static class PlanEvaluateRoute_Patches
                     // with 0 vehicles, Evaluation will yield Upgrade=True only if balance is > 0
                     // but it is not possible because with baalance > 0 it would not sell the last vehicle
                     VehicleBaseUser _best = __instance.CallPrivateMethod<VehicleBaseUser>("GetBest", [vehicles]);
+                    // This is used to establish if new vehicle will be profitable i.e. current load + new load from waiting passengers will be enough to fill Real_Min_Passangers.
+                    // However, formula Waiting/24 does not make any sense.
                     decimal _best_e = (decimal)(_best.Efficiency.GetBestOfTwo() * _best.Passengers.Capacity) / 100m + (decimal)_best.Route.GetWaiting() / 24m / (decimal)vehicles.Length;
                     NewRouteSettings _settings = new NewRouteSettings(_best);
                     int _range2 = __instance.CallPrivateMethod<int>("GetRange", [vehicles]);
@@ -53,6 +55,7 @@ public static class PlanEvaluateRoute_Patches
                         {
                             _settings.SetVehicleEntity(_upgrade);
                             _best.evaluated_on = _best.stops;
+                            // This part is executed when new load is enough to fill the upgrade
                             if (_best_e > (decimal)_upgrade.Real_min_passengers)
                             {
                                 if (manager != null)
@@ -96,6 +99,8 @@ public static class PlanEvaluateRoute_Patches
                             {
                                 VehicleBaseUser _worst2 = __instance.CallPrivateMethod<VehicleBaseUser>("GetNextDowngrade", [vehicles]);
                                 _best_e += (decimal)(_worst2.Efficiency.GetBestOfTwo() * _worst2.Passengers.Capacity) / 90m;
+                                // This part is executed when new load is not enough to fill the upgrade.
+                                // So, manager sells the worst performing vehicle and tries to move its load to a new upgrade.
                                 if (_best_e > (decimal)_upgrade.Real_min_passengers)
                                 {
                                     scene.Session.Commands.Add(new CommandSell(company.ID, _worst2.ID, _worst2.Type, manager));
@@ -227,8 +232,7 @@ public static class PlanEvaluateRoute_Patches
             }
             else
             {
-                // TODO: this is dangerous; it wants to downgrade the line but there is no "worse" vehicle e.g. already Tier1, so it will sell it!
-                // not sure; the while only starts if there is more than 1 vehicle, so this would sell 2nd to last
+                // the while only starts if there is more than 1 vehicle, so this would sell 2nd to last
                 scene.Session.Commands.Add(new CommandSell(company.ID, _worst4.ID, _worst4.Type, manager));
                 LogEvent("DOWNSELL1", _worst4);
             }
