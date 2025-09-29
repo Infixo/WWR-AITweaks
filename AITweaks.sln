@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36511.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AITweaks", "AITweaks.csproj", "{EF021AA7-D7E4-CA28-9781-499C3EAC20D8}"
+EndProject
+Project("{D954291E-2A0B-460D-934E-DC6B0785DB48}") = "WWR-Utilities", "..\WWR-Utilities\WWR-Utilities.shproj", "{C795BFEA-4839-44DD-A100-DB17E03C49AA}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{EF021AA7-D7E4-CA28-9781-499C3EAC20D8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EF021AA7-D7E4-CA28-9781-499C3EAC20D8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EF021AA7-D7E4-CA28-9781-499C3EAC20D8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EF021AA7-D7E4-CA28-9781-499C3EAC20D8}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {77D07EFA-124C-4CFC-9F20-B310788EE022}
+	EndGlobalSection
+	GlobalSection(SharedMSBuildProjectFiles) = preSolution
+		..\WWR-Utilities\WWR-Utilities.projitems*{c795bfea-4839-44dd-a100-db17e03c49aa}*SharedItemsImports = 13
+		..\WWR-Utilities\WWR-Utilities.projitems*{ef021aa7-d7e4-ca28-9781-499c3eac20d8}*SharedItemsImports = 5
+	EndGlobalSection
+EndGlobal

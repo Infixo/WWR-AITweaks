@@ -1,0 +1,46 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="OverlayConsole.cs" />
+    <Compile Remove="Utils.cs" />
+  </ItemGroup>
+  
+  <ItemGroup>
+    <PackageReference Include="Lib.Harmony" Version="2.4.1" />
+  </ItemGroup>
+  
+  <PropertyGroup>
+    <GameDir>C:\Steam\steamapps\common\Worldwide Rush</GameDir>
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+  
+  <ItemGroup>
+    <Reference Include="MonoGame.Framework">
+      <HintPath>$(GameDir)\MonoGame.Framework.dll</HintPath>
+    </Reference>
+    <Reference Include="STMG">
+      <HintPath>$(GameDir)\STMG.dll</HintPath>
+    </Reference>
+    <Reference Include="STVisual">
+      <HintPath>$(GameDir)\STVisual.dll</HintPath>
+    </Reference>
+    <Reference Include="Worldwide Rush">
+      <HintPath>$(GameDir)\Worldwide Rush.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+  
+  
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+    <Exec Command="copy /Y &quot;$(TargetDir)$(ProjectName).dll&quot; &quot;$(GameDir)\Mods\$(ProjectName).dll&quot;&#xD;&#xA;copy /Y &quot;$(TargetDir)$(ProjectName).pdb&quot; &quot;$(GameDir)\Mods\$(ProjectName).pdb&quot;" />
+  </Target>
+  
+  
+  <Import Project="..\WWR-Utilities\WWR-Utilities.projitems" Label="Shared" />
+  
+</Project>
