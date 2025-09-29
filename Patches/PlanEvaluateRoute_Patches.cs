@@ -27,7 +27,7 @@ public static class PlanEvaluateRoute_Patches
         VehicleEvaluation _evaluation = default(VehicleEvaluation);
         for (int i = 0; i < vehicles.Length; i++)
         {
-            if (vehicles[i].Age > 0)
+            if (vehicles[i].Age > 1) // Allow a vehicle to accrue at least 2 months of data
             {
                 _evaluation.Evaluate(vehicles[i]);
             }
@@ -43,9 +43,16 @@ public static class PlanEvaluateRoute_Patches
                     // with 0 vehicles, Evaluation will yield Upgrade=True only if balance is > 0
                     // but it is not possible because with baalance > 0 it would not sell the last vehicle
                     VehicleBaseUser _best = __instance.CallPrivateMethod<VehicleBaseUser>("GetBest", [vehicles]);
+
                     // This is used to establish if new vehicle will be profitable i.e. current load + new load from waiting passengers will be enough to fill Real_Min_Passangers.
                     // However, formula Waiting/24 does not make any sense.
-                    decimal _best_e = (decimal)(_best.Efficiency.GetBestOfTwo() * _best.Passengers.Capacity) / 100m + (decimal)_best.Route.GetWaiting() / 24m / (decimal)vehicles.Length;
+                    //decimal _best_e = (decimal)(_best.Efficiency.GetBestOfTwo() * _best.Passengers.Capacity) / 100m + (decimal)_best.Route.GetWaiting() / 24m / (decimal)vehicles.Length;
+                    // New algorithm
+                    int currentlyUsedCapacity = _best.Passengers.Capacity * (int)_best.Efficiency.GetSumAverage(3) / 100;
+                    int extraNeededCapacity = currentlyUsedCapacity * (int)_best.Route.GetWaiting() / vehicles.Length / (int)_best.Throughput.GetSumAverage(3);
+                    decimal _best_e = (decimal)(currentlyUsedCapacity + extraNeededCapacity);
+                    Log.Write($"city={scene.Cities[manager.Hub.City].User.Name} cur={currentlyUsedCapacity} ex={extraNeededCapacity} waitPerVeh={(int)_best.Route.GetWaiting() / vehicles.Length} thr={_best.Throughput.GetSumAverage(3)} ");
+
                     NewRouteSettings _settings = new NewRouteSettings(_best);
                     int _range2 = __instance.CallPrivateMethod<int>("GetRange", [vehicles]);
                     if (_best.evaluated_on != _best.stops && new VehicleEvaluation(_best).Upgrade)
@@ -68,7 +75,7 @@ public static class PlanEvaluateRoute_Patches
                                     }
                                     decimal _weight4 = __instance.CallPrivateMethod<long>("GetBalance", [_best]) * 2;
                                     manager.AddNewPlan(new GeneratedPlan(_weight4 / (decimal)_price6, _settings, _price6, _best));
-                                    LogEvent("UPPLAN1", _best, _upgrade);
+                                    LogEvent("UPPLAN1", _best, _best_e, _upgrade);
                                 }
                                 else if (company.AI != null)
                                 {
@@ -80,7 +87,7 @@ public static class PlanEvaluateRoute_Patches
                                         _price5 = 1L;
                                     }
                                     company.AI.AddNewPlan(new GeneratedPlan(_weight3 / (decimal)_price5, _settings, _price5, _best));
-                                    LogEvent("UPPLAN2", _best, _upgrade);
+                                    LogEvent("UPPLAN2", _best, _best_e, _upgrade);
                                 }
                                 else
                                 {
@@ -90,7 +97,7 @@ public static class PlanEvaluateRoute_Patches
                                         scene.Session.Commands.Add(new CommandSell(company.ID, _best.ID, _best.Type));
                                         scene.Session.Commands.Add(new CommandNewRoute(company.ID, _settings, open: false));
                                     });
-                                    LogEvent("UPGRADE1", _best, _upgrade);
+                                    LogEvent("UPGRADE1", _best, _best_e, _upgrade);
                                 }
                                 return false;
                             }
@@ -98,7 +105,7 @@ public static class PlanEvaluateRoute_Patches
                             if (_evaluation.samples > 1)
                             {
                                 VehicleBaseUser _worst2 = __instance.CallPrivateMethod<VehicleBaseUser>("GetNextDowngrade", [vehicles]);
-                                _best_e += (decimal)(_worst2.Efficiency.GetBestOfTwo() * _worst2.Passengers.Capacity) / 90m;
+                                _best_e += (decimal)(_worst2.Efficiency.GetSumAverage(3) * _worst2.Passengers.Capacity) / 90m;
                                 // This part is executed when new load is not enough to fill the upgrade.
                                 // So, manager sells the worst performing vehicle and tries to move its load to a new upgrade.
                                 if (_best_e > (decimal)_upgrade.Real_min_passengers)
@@ -115,7 +122,7 @@ public static class PlanEvaluateRoute_Patches
                                             _price4 = 1L;
                                         }
                                         manager.AddNewPlan(new GeneratedPlan(_weight2 / (decimal)_price4, _settings, _price4, _best));
-                                        LogEvent("UPPLAN3", _best, _upgrade);
+                                        LogEvent("UPPLAN3", _best, _best_e, _upgrade);
                                     }
                                     else if (company.AI != null)
                                     {
@@ -127,7 +134,7 @@ public static class PlanEvaluateRoute_Patches
                                             _price3 = 1L;
                                         }
                                         company.AI.AddNewPlan(new GeneratedPlan(_weight / (decimal)_price3, _settings, _price3, _best));
-                                        LogEvent("UPPLAN4", _best, _upgrade);
+                                        LogEvent("UPPLAN4", _best, _best_e, _upgrade);
                                     }
                                     else
                                     {
@@ -137,7 +144,7 @@ public static class PlanEvaluateRoute_Patches
                                             scene.Session.Commands.Add(new CommandSell(company.ID, _best.ID, _best.Type));
                                             scene.Session.Commands.Add(new CommandNewRoute(company.ID, _settings, open: false));
                                         });
-                                        LogEvent("UPGRADE2", _best, _upgrade);
+                                        LogEvent("UPGRADE2", _best, _best_e, _upgrade);
                                     }
                                     return false;
                                 }
@@ -227,7 +234,7 @@ public static class PlanEvaluateRoute_Patches
                     newRouteSettings2.upgrade = new UpgradeSettings(_worst4, scene);
                     scene.Session.Commands.Add(new CommandSell(company.ID, _worst4.ID, _worst4.Type, manager));
                     scene.Session.Commands.Add(new CommandNewRoute(company.ID, newRouteSettings2, open: false, manager));
-                    LogEvent("DOWNGRADE1", _worst4, _downgrade2);
+                    LogEvent("DOWNGRADE1", _worst4, -1, _downgrade2);
                 });
             }
             else
@@ -258,7 +265,7 @@ public static class PlanEvaluateRoute_Patches
                 newRouteSettings.upgrade = new UpgradeSettings(_worst3, scene);
                 scene.Session.Commands.Add(new CommandSell(company.ID, _worst3.ID, _worst3.Type, manager));
                 scene.Session.Commands.Add(new CommandNewRoute(company.ID, newRouteSettings, open: false, manager));
-                LogEvent("DOWNGRADE2", _worst3, _downgrade);
+                LogEvent("DOWNGRADE2", _worst3, -1, _downgrade);
             });
         }
         else if (_worst3.Entity_base.Tier == 1 && _worst3.Age >= 6 && _worst3.Balance.GetRollingYear() < 10000000 && manager == null)
@@ -283,7 +290,7 @@ public static class PlanEvaluateRoute_Patches
 
         // debug & tracking
         //[MethodImpl(MethodImplOptions.NoInlining)]
-        void LogEvent(string type, VehicleBaseUser vh1, VehicleBaseEntity? vh2 = null)
+        void LogEvent(string type, VehicleBaseUser vh1, decimal bestEff = 0m, VehicleBaseEntity? vh2 = null)
         {
             string route = $"{vh1.Route.Last.Name} -> {vh1.Route.Current.Name} -> {vh1.Route.Destination.Name}";
             string vh2txt = vh2 != null ? $"  vh2= {vh2.Tier} {vh2.Translated_name}" : "";
@@ -291,7 +298,7 @@ public static class PlanEvaluateRoute_Patches
 
                 city={scene.Cities[manager.Hub.City].User.Name} dec={type} veh={vehicles.Length} {route} wait={vh1.Route.GetWaiting()}
                 ..up={_evaluation.Upgrade} dn={_evaluation.Downgrade} num={_evaluation.samples} use={100*(int)_evaluation.throughput_now/(int)_evaluation.throughput_max} thr={_evaluation.throughput_min}/{_evaluation.throughput_now}/{_evaluation.throughput_max} bal={_evaluation.balance}
-                ..vh1= {vh1.Entity_base.Tier} {vh1.Entity_base.Translated_name}{vh2txt}
+                ..vh1= {vh1.Entity_base.Tier} {vh1.Entity_base.Translated_name} be={bestEff}{vh2txt}
             """);
         }
     }
