@@ -20,11 +20,11 @@ public struct VehicleEvaluation
     {
         get
         {
-            if (!(throughput_now < throughput_min))
+            if (throughput_now > throughput_min)
             {
-                return balance < 0;
+                return balance < -1000000;
             }
-            return true;
+            return throughput_now < throughput_min * 0.8m;
         }
     }
 
@@ -34,7 +34,7 @@ public struct VehicleEvaluation
         {
             if (throughput_now >= throughput_max * 0.9m) // There are vehicles that need 80% to be even profitable; probably could relate to difficulty
             {
-                return balance > 0;
+                return balance > 1000000;
             }
             return false;
         }

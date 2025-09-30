@@ -1,6 +1,8 @@
 ﻿using HarmonyLib;
 using STM.GameWorld;
 using STM.GameWorld.Users;
+using STMG.Engine;
+using Utilities;
 
 namespace AITweaks.Patches;
 
@@ -8,6 +10,7 @@ namespace AITweaks.Patches;
 [HarmonyPatch(typeof(RouteInstance))]
 public static class RouteInstance_Patches
 {
+    /*
     /// <summary>
     /// Calculates number of passengers waiting to go to one of the cities on the route.
     /// </summary>
@@ -39,7 +42,7 @@ public static class RouteInstance_Patches
         // Indirect passengers - tricky, must check if connecting route is actually the one we're on
         for (int j = 0; j < city.Indirect.Count; j++)
         {
-            if (/*ty.Indirect[j].Destination == destination.City ||*/route.Contains(city.Indirect[j].Next.User))
+            if (/*ty.Indirect[j].Destination == destination.City || route.Contains(city.Indirect[j].Next.User))
             {
                 result += city.Indirect[j].People;
             }
@@ -62,18 +65,20 @@ public static class RouteInstance_Patches
         }
         return result;
     }
-
-
+    */
+    
     [HarmonyPatch("GetWaiting"), HarmonyPrefix]
     public static bool RouteInstance_GetWaiting_Prefix(RouteInstance __instance, ref long __result)
     {
         //return Instructions.Cities[0].GetPassengers(Instructions.Cities[Instructions.Cities.Length - 1]) + Instructions.Cities[Instructions.Cities.Length - 1].GetPassengers(Instructions.Cities[0]);
-        long waiting = 0;
-        foreach (CityUser city in __instance.Instructions.Cities)
-        {
-            waiting += city.GetPassengersEx(__instance.Instructions);
-        }
-        __result = waiting;
+        //long waiting = 0;
+        //foreach (CityUser city in __instance.Instructions.Cities)
+        //{
+            //waiting += city.GetPassengersEx(__instance.Instructions);
+        //}
+        GameScene scene = (GameScene)GameEngine.Last.Main_scene;
+        __result = scene.Session.Companies[__instance.Vehicle.Company].Line_manager.GetLine(__instance.Vehicle).GetWaiting();
         return false;
     }
+    
 }

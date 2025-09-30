@@ -35,7 +35,7 @@ public static class PlanEvaluateRoute_Patches
         if (!_evaluation.Downgrade)
         {
             VehicleBaseUser _user = __instance.CallPrivateMethod<VehicleBaseUser>("GetWorst", [vehicles]);
-            if (_user == null || _user.Balance.GetCurrentMonth() >= -10000000)
+            if (_user == null || _user.Balance.GetSum(3) >= -10000000)
             {
                 if (_evaluation.Upgrade)
                 {
@@ -49,9 +49,11 @@ public static class PlanEvaluateRoute_Patches
                     //decimal _best_e = (decimal)(_best.Efficiency.GetBestOfTwo() * _best.Passengers.Capacity) / 100m + (decimal)_best.Route.GetWaiting() / 24m / (decimal)vehicles.Length;
                     // New algorithm
                     int currentlyUsedCapacity = _best.Passengers.Capacity * (int)_best.Efficiency.GetSumAverage(3) / 100;
-                    int extraNeededCapacity = currentlyUsedCapacity * (int)_best.Route.GetWaiting() / vehicles.Length / (int)_best.Throughput.GetSumAverage(3);
+                    // find a line to which _best belongs to
+                    Line line = scene.Session.Companies[_best.Company].Line_manager.GetLine(_best);
+                    int extraNeededCapacity = currentlyUsedCapacity * (int)line.GetWaiting() / line.Vehicles / (int)_best.Throughput.GetSumAverage(3);
                     decimal _best_e = (decimal)(currentlyUsedCapacity + extraNeededCapacity);
-                    Log.Write($"city={scene.Cities[manager.Hub.City].User.Name} cur={currentlyUsedCapacity} ex={extraNeededCapacity} waitPerVeh={(int)_best.Route.GetWaiting() / vehicles.Length} thr={_best.Throughput.GetSumAverage(3)} ");
+                    Log.Write($"city={scene.Cities[manager.Hub.City].User.Name} id={line.ID+1} cur={currentlyUsedCapacity} ex={extraNeededCapacity} waitPerVeh={(int)line.GetWaiting() / line.Vehicles} thr={_best.Throughput.GetSumAverage(3)} ");
 
                     NewRouteSettings _settings = new NewRouteSettings(_best);
                     int _range2 = __instance.CallPrivateMethod<int>("GetRange", [vehicles]);
@@ -218,7 +220,7 @@ public static class PlanEvaluateRoute_Patches
             _evaluation.samples--;
             // looks for vehicle to downgrade based on balance of last 2 months
             VehicleBaseUser _worst4 = __instance.CallPrivateMethod<VehicleBaseUser>("GetNextDowngrade", [vehicles]);
-            if (_worst4 == null || _worst4.evaluated_on == _worst4.stops || (_worst4.Balance.GetBestOfTwo() > 0 && _worst4.Balance.GetLastMonth() + _worst4.Balance.GetCurrentMonth() > -10000000))
+            if (_worst4 == null || _worst4.evaluated_on == _worst4.stops || (_worst4.Balance.GetBestOfTwo() > 0 && _worst4.Balance.GetLastMonth() + _worst4.Balance.GetSum(3) > -10000000))
             {
                 // stop downgrading if there is no worse vehicle? or balance is > 0
                 return false;
@@ -268,7 +270,7 @@ public static class PlanEvaluateRoute_Patches
                 LogEvent("DOWNGRADE2", _worst3, -1, _downgrade);
             });
         }
-        else if (_worst3.Entity_base.Tier == 1 && _worst3.Age >= 6 && _worst3.Balance.GetRollingYear() < 10000000 && manager == null)
+        else if (_worst3.Entity_base.Tier == 1 && _worst3.Age >= 6 && _worst3.Balance.GetRollingYear() < -10000000 && manager == null)
         {
             // 2025-09-29 I don't want the last vehicle to be sold
             if (company == scene.Session.GetPlayer() && vehicles.Length == 1)
@@ -277,7 +279,7 @@ public static class PlanEvaluateRoute_Patches
             scene.Session.Commands.Add(new CommandSell(company.ID, _worst3.ID, _worst3.Type, manager));
             LogEvent("DOWNSELL2", _worst3);
         }
-        else if (_worst3.Entity_base.Tier == 1 && _worst3.Age >= 12 && _worst3.Balance.GetRollingYear() < 5000000 && manager == null)
+        else if (_worst3.Entity_base.Tier == 1 && _worst3.Age >= 12 && _worst3.Balance.GetRollingYear() < -5000000 && manager == null)
         {
             // 2025-09-29 I don't want the last vehicle to be sold
             if (company == scene.Session.GetPlayer() && vehicles.Length == 1)
@@ -294,9 +296,10 @@ public static class PlanEvaluateRoute_Patches
         {
             string route = $"{vh1.Route.Last.Name} -> {vh1.Route.Current.Name} -> {vh1.Route.Destination.Name}";
             string vh2txt = vh2 != null ? $"  vh2= {vh2.Tier} {vh2.Translated_name}" : "";
+            Line line = scene.Session.Companies[vh1.Company].Line_manager.GetLine(vh1);
             Log.Write($"""
 
-                city={scene.Cities[manager.Hub.City].User.Name} dec={type} veh={vehicles.Length} {route} wait={vh1.Route.GetWaiting()}
+                city={scene.Cities[manager.Hub.City].User.Name} line={line.ID+1} dec={type} veh={vehicles.Length} {route} wait={line.GetWaiting()}
                 ..up={_evaluation.Upgrade} dn={_evaluation.Downgrade} num={_evaluation.samples} use={100*(int)_evaluation.throughput_now/(int)_evaluation.throughput_max} thr={_evaluation.throughput_min}/{_evaluation.throughput_now}/{_evaluation.throughput_max} bal={_evaluation.balance}
                 ..vh1= {vh1.Entity_base.Tier} {vh1.Entity_base.Translated_name} be={bestEff}{vh2txt}
             """);
