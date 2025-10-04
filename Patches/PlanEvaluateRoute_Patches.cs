@@ -4,6 +4,7 @@ using STM.GameWorld;
 using STM.GameWorld.AI;
 using STM.GameWorld.Commands;
 using STM.GameWorld.Users;
+using System;
 using Utilities;
 
 namespace AITweaks.Patches;
@@ -20,7 +21,7 @@ public static class PlanEvaluateRoute_Patches
         VehicleEvaluation _evaluation = default(VehicleEvaluation);
         for (int i = 0; i < vehicles.Length; i++)
         {
-            if (vehicles[i].Age > 1) // Allow a vehicle to accrue at least 2 months of data
+            if (vehicles[i].Age > 0)
             {
                 _evaluation.Evaluate(vehicles[i]);
             }
@@ -63,6 +64,7 @@ public static class PlanEvaluateRoute_Patches
                             // This part is executed when new load is enough to fill the upgrade
                             if (_best_e > (decimal)_upgrade.Real_min_passengers)
                             {
+                                // Here we upgrade our best vehicle to even a better one
                                 if (manager != null)
                                 {
                                     long _price6 = _upgrade.GetPrice(scene, company, scene.Cities[_best.Hub.City].User);
@@ -72,8 +74,8 @@ public static class PlanEvaluateRoute_Patches
                                         _price6 = 1L;
                                     }
                                     decimal _weight4 = __instance.CallPrivateMethod<long>("GetBalance", [_best]) * 2;
-                                    manager.AddNewPlan(new GeneratedPlan(_weight4 / (decimal)_price6, _settings, _price6, _best));
                                     LogEvent("UPPLAN1", _best, _best_e, _upgrade);
+                                    manager.AddNewPlan(new GeneratedPlan(_weight4 / (decimal)_price6, _settings, _price6, _best));
                                 }
                                 else if (company.AI != null)
                                 {
@@ -84,30 +86,37 @@ public static class PlanEvaluateRoute_Patches
                                     {
                                         _price5 = 1L;
                                     }
-                                    company.AI.AddNewPlan(new GeneratedPlan(_weight3 / (decimal)_price5, _settings, _price5, _best));
                                     LogEvent("UPPLAN2", _best, _best_e, _upgrade);
+                                    company.AI.AddNewPlan(new GeneratedPlan(_weight3 / (decimal)_price5, _settings, _price5, _best));
                                 }
                                 else
                                 {
+                                    // Not sure when this happens. There is no AI, and no hub manager.
+                                    // Looks like EvaluateLine is used 3 times, but only Hub!=null is a real one, other 2 are never called (stubs? dead code from the past?)
+                                    LogEvent("UPGRADE1", _best, _best_e, _upgrade);
                                     scene.Session.AddEndOfFrameAction(delegate
                                     {
                                         _settings.upgrade = new UpgradeSettings(_best, scene);
                                         scene.Session.Commands.Add(new CommandSell(company.ID, _best.ID, _best.Type));
                                         scene.Session.Commands.Add(new CommandNewRoute(company.ID, _settings, open: false));
                                     });
-                                    LogEvent("UPGRADE1", _best, _best_e, _upgrade);
                                 }
                                 return false;
                             }
+                            // Here we continue with the upgrade, but the better one has too high real_min_passengers threshold (cannot fill it)
+                            // Never actually been logged... Perhaps at the start of the game when high-tier vehicles are not yet available?
+                            // TODO: this should buy a smaller vehicle, not sell and forcefully upgrade
                             _best.evaluated_on = _best.stops;
                             if (_evaluation.samples > 1)
                             {
                                 VehicleBaseUser _worst2 = __instance.CallPrivateMethod<VehicleBaseUser>("GetNextDowngrade", [vehicles]);
-                                _best_e += (decimal)(_worst2.Efficiency.GetSumAverage(3) * _worst2.Passengers.Capacity) / 90m;
+                                _best_e += (decimal)(_worst2.Efficiency.GetQuarterAverage() * _worst2.Passengers.Capacity) / 90m;
                                 // This part is executed when new load is not enough to fill the upgrade.
                                 // So, manager sells the worst performing vehicle and tries to move its load to a new upgrade.
                                 if (_best_e > (decimal)_upgrade.Real_min_passengers)
                                 {
+                                    // Also dangerous, it sells a vehicle but a new may not be bought...
+                                    // Granted that there is nore than 1 vehicle, but until GeneratedPlan() is fixed, that basically harms the route
                                     scene.Session.Commands.Add(new CommandSell(company.ID, _worst2.ID, _worst2.Type, manager));
                                     LogEvent("UPSELL1", _worst2);
                                     if (manager != null)
@@ -136,6 +145,7 @@ public static class PlanEvaluateRoute_Patches
                                     }
                                     else
                                     {
+                                        // this seems stupid, it sells the vehicle and buys the same one again???
                                         scene.Session.AddEndOfFrameAction(delegate
                                         {
                                             _settings.upgrade = new UpgradeSettings(_best, scene);
@@ -149,35 +159,59 @@ public static class PlanEvaluateRoute_Patches
                             }
                         }
                     }
-                    if (!_best.Entity_base.CanBuy(company, _best.Hub.Longitude) || _evaluation.samples >= 3)
+                    
+                    // Here we continue with line upgrade BUT there is no better vehicle
+                    // INFIXO: What is missing here:
+                    // a) scenario where all vehicles are now blocked in the manager and it needs to find one from a different company TODO for later
+                    // b) adding a vehicle when there are more than 3 on the line
+                    
+                    if (!_best.Entity_base.CanBuy(company, _best.Hub.Longitude)) // || _evaluation.samples >= 3) // Infixo: does it mean that it will never have more than 3 vehicles? Allow for more than 3
                     {
                         return false;
                     }
-                    _best_e /= 2m;
-                    if (_best_e <= (decimal)_best.Entity_base.Real_min_passengers)
+
+                    // find best vehicle to serve half of needs - note that we need to servce extraNeededCapacity!
+                    _best_e = extraNeededCapacity / 2;
+                    VehicleBaseEntity newVehicle = _best.Entity_base;
+                    VehicleCompanyEntity _vehicle_company = newVehicle.Company.Entity;
+                    while (_best_e < (decimal)newVehicle.Real_min_passengers)
                     {
-                        return false;
+                        bool _res = false;
+                        for (int i = _vehicle_company.Vehicles.Count - 1; i >= 0; i--)
+                        {
+                            _ = PlanEvaluateRoute_IsWorse_Prefix(__instance, ref _res, company, newVehicle, _vehicle_company.Vehicles[i], _best.Hub, _range2);
+                            if (_res)
+                            {
+                                newVehicle = _vehicle_company.Vehicles[i];
+                                break;
+                            }
+                        }
+                        if (!_res) return false; // we only break if some reason we cannot a downgrade after looking through entire chain
                     }
+
+                    // switch the vehicle
+                    _settings.SetVehicleEntity(newVehicle);
+
                     if (manager != null)
                     {
-                        long _price2 = _best.Entity_base.GetPrice(scene, company, scene.Cities[_best.Hub.City].User);
+                        long _price2 = newVehicle.GetPrice(scene, company, scene.Cities[_best.Hub.City].User);
                         if (_best.Hub.Full())
                         {
                             _price2 += _best.Hub.GetNextLevelPrice(scene.Session);
                         }
-                        manager.AddNewPlan(new GeneratedPlan(1m, new NewRouteSettings(_best), _price2));
-                        LogEvent("UPPLAN5", _best);
+                        LogEvent("UPPLAN5", _best, _best_e, newVehicle);
+                        manager.AddNewPlan(new GeneratedPlan(1m, _settings, _price2));
                         return false;
                     }
                     if (company.AI != null)
                     {
-                        long _price = _best.Entity_base.GetPrice(scene, company, scene.Cities[_best.Hub.City].User);
+                        long _price = newVehicle.GetPrice(scene, company, scene.Cities[_best.Hub.City].User);
                         if (_best.Hub.Full())
                         {
                             _price += _best.Hub.GetNextLevelPrice(scene.Session);
                         }
-                        company.AI.AddNewPlan(new GeneratedPlan(1m, new NewRouteSettings(_best), _price));
-                        LogEvent("UPPLAN6", _best);
+                        LogEvent("UPPLAN6", _best, _best_e, newVehicle);
+                        company.AI.AddNewPlan(new GeneratedPlan(1m, _settings, _price));
                         return false;
                     }
                     if (_best.Hub.Full())
@@ -186,11 +220,11 @@ public static class PlanEvaluateRoute_Patches
                         {
                             return false;
                         }
-                        scene.Session.Commands.Add(new CommandUpgradeHub(company.ID, _best.Hub.City));
                         LogEvent("HUBFULL", _best);
+                        scene.Session.Commands.Add(new CommandUpgradeHub(company.ID, _best.Hub.City));
                     }
-                    scene.Session.Commands.Add(new CommandNewRoute(company.ID, new NewRouteSettings(_best), open: false));
-                    LogEvent("UPGRADE3", _best);
+                    LogEvent("UPGRADE3", _best, _best_e, newVehicle);
+                    scene.Session.Commands.Add(new CommandNewRoute(company.ID, _settings, open: false));
                 }
                 else if (vehicles.Length > 1)
                 {
@@ -198,8 +232,8 @@ public static class PlanEvaluateRoute_Patches
                     if (_worst != null && _worst.evaluated_on != _worst.stops && _worst.Age > 3 && _worst.Balance.GetRollingYear() < 0)
                     {
                         // If there are 2+ vehicles and the line is average (no upgrade, no downgrade) BUT generates loses, it sells 1 vehicle
-                        scene.Session.Commands.Add(new CommandSell(company.ID, _worst.ID, _worst.Type, manager));
                         LogEvent("UPSELL2", _worst);
+                        scene.Session.Commands.Add(new CommandSell(company.ID, _worst.ID, _worst.Type, manager));
                     }
                 }
                 else if (__instance.CallPrivateMethod<bool>("AllVehiclesNotDelivering", [vehicles]))
@@ -210,10 +244,11 @@ public static class PlanEvaluateRoute_Patches
             }
         }
         int _range = __instance.CallPrivateMethod<int>("GetRange", [vehicles]);
+        // downgrade vehicles if there are more than 1 (because Evaluation has more than 1 sample)
         while (_evaluation.Downgrade && _evaluation.samples > 1)
         {
-            // downgrade vehicles if there are more than 1 (because Evaluation has more than 1 sample)
-            _evaluation.samples--;
+            // Infixo: there is some issue with samples, it is being decreased too many times e.g. Remove does it so why is it here?
+            //_evaluation.samples--;
             // looks for vehicle to downgrade based on balance of last 2 months
             VehicleBaseUser _worst4 = __instance.CallPrivateMethod<VehicleBaseUser>("GetNextDowngrade", [vehicles]);
             if (_worst4 == null || _worst4.evaluated_on == _worst4.stops || (_worst4.Balance.GetBestOfTwo() > 0 && _worst4.Balance.GetLastMonth() + _worst4.Balance.GetSum(3) > -10000000))
@@ -225,6 +260,7 @@ public static class PlanEvaluateRoute_Patches
             VehicleBaseEntity _downgrade2 = __instance.CallPrivateMethod<VehicleBaseEntity>("GetDowngrade", [company, _worst4, _range]);
             if (_downgrade2 != null)
             {
+                LogEvent("DOWNGRADE1", _worst4, -1, _downgrade2);
                 scene.Session.AddEndOfFrameAction(delegate
                 {
                     NewRouteSettings newRouteSettings2 = new NewRouteSettings(_worst4);
@@ -232,14 +268,13 @@ public static class PlanEvaluateRoute_Patches
                     newRouteSettings2.upgrade = new UpgradeSettings(_worst4, scene);
                     scene.Session.Commands.Add(new CommandSell(company.ID, _worst4.ID, _worst4.Type, manager));
                     scene.Session.Commands.Add(new CommandNewRoute(company.ID, newRouteSettings2, open: false, manager));
-                    LogEvent("DOWNGRADE1", _worst4, -1, _downgrade2);
                 });
             }
             else
             {
                 // the while only starts if there is more than 1 vehicle, so this would sell 2nd to last
-                scene.Session.Commands.Add(new CommandSell(company.ID, _worst4.ID, _worst4.Type, manager));
                 LogEvent("DOWNSELL1", _worst4);
+                scene.Session.Commands.Add(new CommandSell(company.ID, _worst4.ID, _worst4.Type, manager));
             }
             VehicleEvaluation _e = new VehicleEvaluation(_worst4);
             _evaluation.Remove(_e);
@@ -256,6 +291,7 @@ public static class PlanEvaluateRoute_Patches
         VehicleBaseEntity _downgrade = __instance.CallPrivateMethod<VehicleBaseEntity>("GetDowngrade", [company, _worst3, _range]);
         if (_downgrade != null)
         {
+            LogEvent("DOWNGRADE2", _worst3, -1, _downgrade);
             scene.Session.AddEndOfFrameAction(delegate
             {
                 NewRouteSettings newRouteSettings = new NewRouteSettings(_worst3);
@@ -263,7 +299,6 @@ public static class PlanEvaluateRoute_Patches
                 newRouteSettings.upgrade = new UpgradeSettings(_worst3, scene);
                 scene.Session.Commands.Add(new CommandSell(company.ID, _worst3.ID, _worst3.Type, manager));
                 scene.Session.Commands.Add(new CommandNewRoute(company.ID, newRouteSettings, open: false, manager));
-                LogEvent("DOWNGRADE2", _worst3, -1, _downgrade);
             });
         }
         else if (_worst3.Entity_base.Tier == 1 && _worst3.Age >= 6 && _worst3.Balance.GetRollingYear() < -10000000 && manager == null)
@@ -272,8 +307,8 @@ public static class PlanEvaluateRoute_Patches
             if (company == scene.Session.GetPlayer() && vehicles.Length == 1)
                 return false;
             // DANGEROUS - can sell last Tier1 especially for new lines! it has 6 months to get to 10mil!!!
-            scene.Session.Commands.Add(new CommandSell(company.ID, _worst3.ID, _worst3.Type, manager));
             LogEvent("DOWNSELL2", _worst3);
+            scene.Session.Commands.Add(new CommandSell(company.ID, _worst3.ID, _worst3.Type, manager));
         }
         else if (_worst3.Entity_base.Tier == 1 && _worst3.Age >= 12 && _worst3.Balance.GetRollingYear() < -5000000 && manager == null)
         {
@@ -281,8 +316,8 @@ public static class PlanEvaluateRoute_Patches
             if (company == scene.Session.GetPlayer() && vehicles.Length == 1)
                 return false;
             // DANGEROUS - can sell last Tier1 especially for new lines! it has 12 months to get to 5mil!!!
-            scene.Session.Commands.Add(new CommandSell(company.ID, _worst3.ID, _worst3.Type, manager));
             LogEvent("DOWNSELL3", _worst3);
+            scene.Session.Commands.Add(new CommandSell(company.ID, _worst3.ID, _worst3.Type, manager));
         }
         return false;
 
@@ -337,22 +372,23 @@ public static class PlanEvaluateRoute_Patches
             if (_n.Tier > _o.Tier || (_n.Tier == _o.Tier && _n.Max_capacity > _o.Max_capacity))
             {
                 __result = __instance.GetPrivateField<long>("wealth") > next.Price;
-                return false;
+                //return false;
             }
             return false;
         }
         if (next.Tier > original.Tier || (next.Tier == original.Tier && next.Capacity > original.Capacity))
         {
             __result = __instance.GetPrivateField<long>("wealth") > next.Price;
-            return false;
+            //return false;
         }
         return false;
     }
 
 
     [HarmonyPatch("IsWorse"), HarmonyPrefix]
-    public static bool IsWorse(PlanEvaluateRoute __instance, ref bool __result, Company company, VehicleBaseEntity original, VehicleBaseEntity next, Hub hub, int range)
+    public static bool PlanEvaluateRoute_IsWorse_Prefix(PlanEvaluateRoute __instance, ref bool __result, Company company, VehicleBaseEntity original, VehicleBaseEntity next, Hub hub, int range)
     {
+        __result = false;
         if (next.Graphics.Entity == null)
         {
             return false;
@@ -363,11 +399,12 @@ public static class PlanEvaluateRoute_Patches
         }
         if (next.CanBuy(company, hub.Longitude) && original.Price > next.Price)
         {
+            __result = true;
             //if (original.Tier >= next.Tier)
             //{
-                //return original.Real_min_passengers > next.Real_min_passengers;
+            //return original.Real_min_passengers > next.Real_min_passengers;
             //}
-            return true;
+            //return false;
         }
         return false;
     }
