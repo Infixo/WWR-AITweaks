@@ -20,11 +20,9 @@ public struct VehicleEvaluation
     {
         get
         {
-            if (throughput_now > throughput_min)
-            {
-                return balance < -1000000;
-            }
-            return throughput_now < throughput_min * 0.8m;
+            if (throughput_now < throughput_min * 0.8m)
+                return true;
+            return balance < -1000000; // TODO: this should relate to vehicle's innate profitability
         }
     }
 
@@ -32,9 +30,9 @@ public struct VehicleEvaluation
     {
         get
         {
-            if (throughput_now >= throughput_max * 0.9m) // There are vehicles that need 80% to be even profitable; probably could relate to difficulty
+            if (throughput_now > throughput_max * 0.9m) // There are vehicles that need 80% to be even profitable; probably could relate to difficulty
             {
-                return balance > 1000000;
+                return balance > 1000000; // TODO: this should relate to vehicle's innate profitability
             }
             return false;
         }
@@ -61,8 +59,8 @@ public struct VehicleEvaluation
     public void Evaluate(VehicleBaseUser vehicle)
     {
         samples++;
-        long _now = vehicle.Throughput.GetSumAverage(3); // last quarter average GetBest(vehicle.Throughput);
-        balance += vehicle.Balance.GetSum(3);
+        long _now = vehicle.Throughput.GetQuarterAverage(); // last quarter average GetBest(vehicle.Throughput);
+        balance += vehicle.Balance.GetSum(4);
         if (_now == 0L || vehicle.Age == 0)
         {
             throughput_now += 100m;
@@ -71,7 +69,7 @@ public struct VehicleEvaluation
             return;
         }
         throughput_now += (decimal)_now;
-        long _efficiency = vehicle.Efficiency.GetSumAverage(3); // last quarter average
+        long _efficiency = vehicle.Efficiency.GetQuarterAverage(); // last quarter average
         if (_efficiency > 0)
         {
             _now = _now * 100 / _efficiency; // _now is max now :)

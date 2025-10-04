@@ -4,13 +4,6 @@ using STM.GameWorld;
 using STM.GameWorld.AI;
 using STM.GameWorld.Commands;
 using STM.GameWorld.Users;
-using STM.UI.Floating;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Text;
-using System.Threading.Tasks;
 using Utilities;
 
 namespace AITweaks.Patches;
@@ -48,12 +41,15 @@ public static class PlanEvaluateRoute_Patches
                     // However, formula Waiting/24 does not make any sense.
                     //decimal _best_e = (decimal)(_best.Efficiency.GetBestOfTwo() * _best.Passengers.Capacity) / 100m + (decimal)_best.Route.GetWaiting() / 24m / (decimal)vehicles.Length;
                     // New algorithm
-                    int currentlyUsedCapacity = _best.Passengers.Capacity * (int)_best.Efficiency.GetSumAverage(3) / 100;
+                    int currentlyUsedCapacity = _best.Passengers.Capacity * (int)_best.Efficiency.GetQuarterAverage() / 100;
+                    //int currentlyUsedCapacity = _best.Passengers.Capacity * (int)_best.GetQuarterEfficiency() / 100;
                     // find a line to which _best belongs to
                     Line line = scene.Session.Companies[_best.Company].Line_manager.GetLine(_best);
-                    int extraNeededCapacity = currentlyUsedCapacity * (int)line.GetWaiting() / line.Vehicles / (int)_best.Throughput.GetSumAverage(3);
+                    int averageThroughput = (int)_best.Throughput.GetQuarterAverage();
+                    int waiting = (int)line.GetWaiting();
+                    int extraNeededCapacity = averageThroughput > 0 ? currentlyUsedCapacity * waiting / line.Vehicles / averageThroughput : currentlyUsedCapacity/2; // inc by 50% by default
                     decimal _best_e = (decimal)(currentlyUsedCapacity + extraNeededCapacity);
-                    Log.Write($"city={scene.Cities[manager.Hub.City].User.Name} id={line.ID+1} cur={currentlyUsedCapacity} ex={extraNeededCapacity} waitPerVeh={(int)line.GetWaiting() / line.Vehicles} thr={_best.Throughput.GetSumAverage(3)} ");
+                    Log.Write($"city={scene.Cities[manager.Hub.City].User.Name} id={line.ID+1} cur={currentlyUsedCapacity} ex={extraNeededCapacity} waitPerVeh={waiting / line.Vehicles} thr={averageThroughput} ");
 
                     NewRouteSettings _settings = new NewRouteSettings(_best);
                     int _range2 = __instance.CallPrivateMethod<int>("GetRange", [vehicles]);
