@@ -29,6 +29,19 @@ public static class PlanEvaluateRoute_Patches
         if (vehs.Length == 0 || (vehicles.Length - vehs.Length) > vehicles.Length/5) // TODO: PARAMETER
             return false;
 
+        // Step 1a
+        // This is to prevent repeated evals when the data has not changed i.e. vehicles has not reached destination
+        bool alreadyEvaluated = true;
+        foreach (VehicleBaseUser veh in vehs)
+            alreadyEvaluated &= veh.evaluated_on == veh.stops;
+        if (alreadyEvaluated)
+        {
+#if LOGGING
+            Log.Write("[EVALDONE]", false);
+#endif
+            return false;
+        }
+
         // Step 2 Assess the line
         // Calculate: waiting, throughput min/ now / max, min vehicles, profitability, total balance
         // Do NOT use average, use simple sum. Since all is extrapolated via min_cap and max_cap. It will simply evaluate the last 3 months performance in total,
@@ -53,6 +66,7 @@ public static class PlanEvaluateRoute_Patches
         //  < 0 v1 comes first
         //  0 equal
         //  > 0 v1 comes after v2
+#pragma warning disable CS8321 // Local function is declared but never used
         static int CompareVehiclesDescending(VehicleBaseUser v1, VehicleBaseUser v2)
         {
             if (v1.Entity_base.Tier == v2.Entity_base.Tier)
@@ -61,14 +75,17 @@ public static class PlanEvaluateRoute_Patches
                 return (int)(v2.Entity_base.Tier - v1.Entity_base.Tier);
         }
         //Array.Sort(vehs, CompareVehiclesDescending);
+#pragma warning restore CS8321 // Local function is declared but never used
         Array.Sort(vehs, (v1, v2) => v2.Balance.GetSum(3).CompareTo(v1.Balance.GetSum(3))); // balance only
 
 #if LOGGING
         // Debug part
+#pragma warning disable CS8602 // Dereference of a possibly null reference.
         string header = $"[{company.ID}-{line.ID+1}-{scene.Cities[manager.Hub.City].User.Name}] ";
-        Log.Write(header + $"START n={vehs.Length}/{optimal} t={evaluation.throughput_min}/{evaluation.throughput_now}/{evaluation.throughput_max} e={evaluation.throughput_now*100m/evaluation.throughput_max:F0} b={evaluation.balance/100/1000:F0}k/{evaluation.profitability/100/1000:F0}k");
+#pragma warning restore CS8602 // Dereference of a possibly null reference.
+        Log.Write(header + $"START n={vehs.Length}/{optimal} {evaluation.throughput_now * 100m / evaluation.throughput_max:F0}% t={evaluation.throughput_min}/{evaluation.throughput_now}/{evaluation.throughput_max} b={evaluation.balance/100/1000:F0}k p={evaluation.profitability/100/1000:F0}k w={line.GetWaiting()}", false);
         for (int i = 0; i < vehs.Length; i++)
-            Log.Write(header + $"{i}. {vehs[i].ID}-{vehs[i].Entity_base.Tier}-{vehs[i].Entity_base.Translated_name} e={vehs[i].Efficiency.GetSumAverage(3)} b={vehs[i].Balance.GetSum(3)/100/1000:F0}k");
+            Log.Write(header + $"{i}. {vehs[i].ID}-{vehs[i].Entity_base.Tier}-{vehs[i].Entity_base.Translated_name} {vehs[i].Efficiency.GetSumAverage(3)}% {vehs[i].Balance.GetSum(3)/100/1000:F0}k s={vehs[i].stops} e={vehs[i].evaluated_on}", false);
 #endif
 
         // Step 3 Decision tree
@@ -105,15 +122,27 @@ public static class PlanEvaluateRoute_Patches
         {
             dec += "ERROR";
         }
-        Log.Write(header + dec + text);
+        Log.Write(header + dec + text, false);
+
+        void LogDecision(string type, VehicleBaseUser vh1, VehicleBaseEntity? vh2 = null)
+        {
+            string vh2txt = vh2 != null ? $"  vh2= {vh2.Tier}-{vh2.Translated_name}" : "";
+            Log.Write($"{header}{type} up={evaluation.Upgrade} dn={evaluation.Downgrade} vh1= {vh1.ID}-{vh1.Entity_base.Tier}-{vh1.Entity_base.Translated_name} {vh2txt}", false);
+        }
 #endif
+        // this is to prevent repeated evals when the data has not changed i.e. vehicles has not reached destination
+        void MarkLineAsEvaluated()
+        {
+            foreach (VehicleBaseUser veh in vehs)
+                veh.evaluated_on = veh.stops;
+        }
 
         // Scenario: Upgrade existing
         if (evaluation.Upgrade && vehs.Length >= optimal)
         {
             // Find vehicle to upgrade, strting with best; if none can be upgraded then ADD_NEW
-            VehicleBaseUser vehicle = null;
-            VehicleBaseEntity upgrade = null;
+            VehicleBaseUser? vehicle = null;
+            VehicleBaseEntity? upgrade = null;
             for (int i = 0; i < vehs.Length && upgrade == null; i++)
             {
                 vehicle = vehs[i];
@@ -122,7 +151,7 @@ public static class PlanEvaluateRoute_Patches
             if (upgrade != null && vehicle != null)
             {
                 // LOGIC
-                vehicle.evaluated_on = vehicle.stops;
+                //vehicle.evaluated_on = vehicle.stops;
                 NewRouteSettings settings = new(vehicle);
                 settings.SetVehicleEntity(upgrade);
                 long price = upgrade.GetPrice(scene, company, scene.Cities[vehicle.Hub.City].User);
@@ -130,9 +159,10 @@ public static class PlanEvaluateRoute_Patches
                 if (price <= 0L) price = 1L;
                 decimal weight = __instance.CallPrivateMethod<long>("GetBalance", [vehicle]) * 2;
 #if LOGGING
-                LogEvent("UPGRADE", vehicle, 0, upgrade);
+                LogDecision("UPGRADE", vehicle, upgrade);
 #endif
                 manager.AddNewPlan(new GeneratedPlan(weight / (decimal)price, settings, price, vehicle));
+                MarkLineAsEvaluated();
                 return false;
             }
         }
@@ -149,9 +179,10 @@ public static class PlanEvaluateRoute_Patches
             if (best.Hub.Full())
                 price += best.Hub.GetNextLevelPrice(scene.Session);
 #if LOGGING
-            LogEvent("ADDNEW", best, 0, newVehicle);
+            LogDecision("ADDNEW", best, newVehicle);
 #endif
             manager.AddNewPlan(new GeneratedPlan(1m, settings, price));
+            MarkLineAsEvaluated();
             return false;
         }
 
@@ -159,8 +190,8 @@ public static class PlanEvaluateRoute_Patches
         if (evaluation.Downgrade && vehs.Length <= optimal)
         {
             // Find vehicle to downgrade, strting with the worst; if none can be downgraded, then SELL
-            VehicleBaseUser vehicle = null;
-            VehicleBaseEntity downgrade = null;
+            VehicleBaseUser? vehicle = null;
+            VehicleBaseEntity? downgrade = null;
             for (int i = 0; i < vehs.Length && downgrade == null; i++)
             {
                 vehicle = vehs[^(i + 1)];
@@ -169,7 +200,7 @@ public static class PlanEvaluateRoute_Patches
             if (downgrade != null && vehicle != null)
             {
 #if LOGGING
-                LogEvent("DOWNGRADE", vehicle, 0, downgrade);
+                LogDecision("DOWNGRADE", vehicle, downgrade);
 #endif
                 scene.Session.AddEndOfFrameAction(delegate
                 {
@@ -179,6 +210,7 @@ public static class PlanEvaluateRoute_Patches
                     scene.Session.Commands.Add(new CommandSell(company.ID, vehicle.ID, vehicle.Type, manager));
                     scene.Session.Commands.Add(new CommandNewRoute(company.ID, settings, open: false, manager));
                 });
+                MarkLineAsEvaluated();
                 return false;
             }
         }
@@ -190,9 +222,10 @@ public static class PlanEvaluateRoute_Patches
             if (vehs.Length >= 2)
             {
 #if LOGGING
-                LogEvent("SELLVEH", worst);
+                LogDecision("SELLVEH", worst);
 #endif
                 scene.Session.Commands.Add(new CommandSell(company.ID, worst.ID, worst.Type, manager));
+                MarkLineAsEvaluated();
                 return false;
             }
         }
@@ -201,7 +234,7 @@ public static class PlanEvaluateRoute_Patches
         if (manager == null && vehs.Length == 1 && worst.Age > 6 && worst.Balance.GetSum(6) < -2 * evaluation.profitability)
         {
 #if LOGGING
-            LogEvent("AISELL", worst);
+            LogDecision("AISELL", worst);
 #endif
             scene.Session.Commands.Add(new CommandSell(company.ID, worst.ID, worst.Type, manager));
         }
@@ -556,25 +589,25 @@ public static class PlanEvaluateRoute_Patches
 #endif
     }
 
-        /*
-        [HarmonyPatch("GetBetter"), HarmonyPrefix]
-        public static bool GetBetter_Prefix(PlanEvaluateRoute __instance, ref VehicleBaseEntity __result, Company company, VehicleCompanyEntity vehicle_company, VehicleBaseEntity entity, Hub hub, int range)
+    /*
+    [HarmonyPatch("GetBetter"), HarmonyPrefix]
+    public static bool GetBetter_Prefix(PlanEvaluateRoute __instance, ref VehicleBaseEntity __result, Company company, VehicleCompanyEntity vehicle_company, VehicleBaseEntity entity, Hub hub, int range)
+    {
+        for (int i = 0; i < vehicle_company.Vehicles.Count; i++)
         {
-            for (int i = 0; i < vehicle_company.Vehicles.Count; i++)
+            bool temp = __instance.CallPrivateMethod<bool>("IsBetter", [company, entity, vehicle_company.Vehicles[i], hub, range]);
+            if (vehicle_company.Vehicles[i].Type_name == entity.Type_name && temp)
             {
-                bool temp = __instance.CallPrivateMethod<bool>("IsBetter", [company, entity, vehicle_company.Vehicles[i], hub, range]);
-                if (vehicle_company.Vehicles[i].Type_name == entity.Type_name && temp)
-                {
-                    __result = vehicle_company.Vehicles[i];
-                    return false;
-                }
+                __result = vehicle_company.Vehicles[i];
+                return false;
             }
-            __result = null;
-            return false;
         }
-        */
+        __result = null;
+        return false;
+    }
+    */
 
-        [HarmonyPatch("IsBetter"), HarmonyPrefix]
+    [HarmonyPatch("IsBetter"), HarmonyPrefix]
     public static bool PlanEvaluateRoute_IsBetter_Prefix(PlanEvaluateRoute __instance, ref bool __result, Company company, VehicleBaseEntity original, VehicleBaseEntity next, Hub hub, int range)
     {
         __result = false;
