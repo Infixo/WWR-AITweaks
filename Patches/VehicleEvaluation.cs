@@ -1,6 +1,7 @@
 using STM.Data.Entities;
 using STM.GameWorld;
 using STM.GameWorld.Users;
+using Utilities;
 
 namespace AITweaks.Patches;
 
@@ -18,16 +19,28 @@ public struct VehicleEvaluation
 
     public long profitability;
 
+    public float sumSpeed;
+
+    public float sumCapacity;
+
+    public float gap;
+
+    public readonly float AvgSpeed => sumSpeed / (float)samples;
+
+    public readonly float AvgCapacity => sumCapacity / sumSpeed;
+
     public bool Downgrade
     {
         get
         {
             if (throughput_now < throughput_min)
-                return true;
-            decimal treshold = (throughput_max + throughput_min) / 2; // middle point
+                if (balance < 0 || gap < 1f)
+                    return true;
+            decimal treshold = throughput_min + (throughput_max - throughput_min) / 3; // 1/3 of min-max gap
             if (throughput_now < treshold)
-                return balance < -profitability / 4; // TODO: this should relate to vehicle's innate profitability
-            return false;
+                if (balance < -profitability / 4 || gap <0.5f) // this should relate to vehicle's innate profitability
+                    return true;
+            return false; // means we're in or above range or there is enough waiting passengers to not downgrade atm
         }
     }
 
@@ -35,13 +48,18 @@ public struct VehicleEvaluation
     {
         get
         {
-            decimal treshold = throughput_max - (throughput_max - throughput_min) / 4; // 3/4 of min-max gap
+            decimal third = (throughput_max - throughput_min) / 3;
+            decimal treshold = throughput_max - third; // 2/3 of min-max gap
             if (throughput_now > treshold) // There are vehicles that need 80% to be even profitable; probably could relate to difficulty
-                return balance > profitability / 4; // TODO: this should relate to vehicle's innate profitability
-            treshold = (throughput_max + throughput_min) / 2; // middle point
+                if (balance > 0 || gap > 0.5f)
+                    return true;
+            treshold = throughput_min + third; // 1/3 of min-max gap
             if (throughput_now > treshold)
-                return balance > profitability / 2;
-            return false;
+                if (balance > profitability / 3 || gap > 0.5f) // this should relate to vehicle's innate profitability
+                    return true;
+            if (throughput_now > throughput_min && gap > 1f && balance > 0)
+                return true;
+            return gap > 1.5f && balance > -profitability / 4;
         }
     }
 
@@ -76,6 +94,8 @@ public struct VehicleEvaluation
         int maxCap = ((vehicle.Entity_base is TrainEntity _train) ? _train.Max_capacity : vehicle.Entity_base.Capacity);
         int minCap = vehicle.Entity_base.Real_min_passengers;
         long profit = vehicle.Entity_base.GetEstimatedProfit();
+        sumSpeed += vehicle.Entity_base.Speed;
+        sumCapacity += maxCap * vehicle.Entity_base.Speed;
         for (int offset = 0; offset < 3 && offset < vehicle.Balance.Months; offset++)
         {
             balance += vehicle.Balance.GetOffset(offset);

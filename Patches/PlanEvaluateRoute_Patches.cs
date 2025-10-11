@@ -2,11 +2,13 @@
 
 using HarmonyLib;
 using STM;
+using STM.Data;
 using STM.Data.Entities;
 using STM.GameWorld;
 using STM.GameWorld.AI;
 using STM.GameWorld.Commands;
 using STM.GameWorld.Users;
+using STMG.Engine;
 using Utilities;
 
 namespace AITweaks.Patches;
@@ -54,6 +56,28 @@ public static class PlanEvaluateRoute_Patches
         Line line = scene.Session.Companies[vehs[0].Company].Line_manager.GetLine(vehs[0]);
         int waiting = (int)line.GetWaiting();
 
+        // Step 2a Calculate more advanced metrics
+        float distance = (float)line.GetTotalDistance();
+        int numStops = line.Instructions.Cyclic ? line.Instructions.Cities.Length + 1 : line.Instructions.Cities.Length;
+        // Get station wait time
+        int stationTime = 0; // in seconds
+        switch (line.Vehicle_type)
+        {
+            case 0: stationTime = MainData.Defaults.Bus_station_time; break;
+            case 1: stationTime = MainData.Defaults.Train_station_time; break;
+            case 2: stationTime = MainData.Defaults.Plane_airport_time; break;
+            case 3: stationTime = MainData.Defaults.Ship_port_time; break;
+        }
+        float travelTime = (distance / evaluation.AvgSpeed + (float)(numStops - 1) * (float)stationTime / 3600f);
+        float numTrips = 24f / travelTime;
+        float months = 2f + (float)scene.Session.Second / 86400f; // TODO: 2 is related to GetSum(3) - we use 2 full months and a fraction of the current one
+        float monthlyThroughput = (float)evaluation.throughput_max / months;
+        float perVehicle = monthlyThroughput / (float)vehs.Length;
+        float waitingFraction = (float)waiting * ((float)vehs.Length / (float)line.Routes.Count);
+        float waitPerTrip = waitingFraction / numTrips;
+        float vehicleGap = waitPerTrip / perVehicle;
+        evaluation.gap = vehicleGap;
+
         // optimal number of vehicles
         int optimal = line.Instructions.Cities.Length;
         if (line.Vehicle_type == 1) optimal /= 2; // train
@@ -83,9 +107,14 @@ public static class PlanEvaluateRoute_Patches
 #pragma warning disable CS8602 // Dereference of a possibly null reference.
         string header = $"[{company.ID}-{line.ID+1}-{scene.Cities[manager.Hub.City].User.Name}] ";
 #pragma warning restore CS8602 // Dereference of a possibly null reference.
-        Log.Write(header + $"START n={vehs.Length}/{optimal} {evaluation.throughput_now * 100m / evaluation.throughput_max:F0}% t={evaluation.throughput_min}/{evaluation.throughput_now}/{evaluation.throughput_max} b={evaluation.balance/100/1000:F0}k p={evaluation.profitability/100/1000:F0}k w={line.GetWaiting()}", false);
+        Log.Write(header + $"START n={vehs.Length} of {line.Routes.Count} /{optimal}  t={evaluation.throughput_min}/{evaluation.throughput_now}/{evaluation.throughput_max} b={evaluation.balance/100/1000:F0}k p={evaluation.profitability/100/1000:F0}k w={waiting}", false);
+        float eMin = (float)evaluation.throughput_min * 100f / (float)evaluation.throughput_max;
+        float eThird = (float)(evaluation.throughput_max - evaluation.throughput_min) * 100f / 3f / (float)evaluation.throughput_max;
+        Log.Write(header + $" eval {evaluation.throughput_now * 100m / evaluation.throughput_max:F1}% min={eMin:F1} range={eMin+eThird:F1}-{eMin+eThird*2:F1}", false);
+        Log.Write(header + $" line {distance:F0}km +{numStops} {evaluation.AvgSpeed:F1}kmh {travelTime:F1}h -> {numTrips:F1} trips", false);
+        Log.Write(header + $" m={months:F2} t={monthlyThroughput:F0} {perVehicle:F1}/v wait {waitingFraction:F0} -> {waitPerTrip:F1}/tr -> {vehicleGap:F2} gap", false);
         for (int i = 0; i < vehs.Length; i++)
-            Log.Write(header + $"{i}. {vehs[i].ID}-{vehs[i].Entity_base.Tier}-{vehs[i].Entity_base.Translated_name} {vehs[i].Efficiency.GetSumAverage(3)}% {vehs[i].Balance.GetSum(3)/100/1000:F0}k s={vehs[i].stops} e={vehs[i].evaluated_on}", false);
+            Log.Write(header + $" {i}. {vehs[i].ID}-{vehs[i].Entity_base.Tier}-{vehs[i].Entity_base.Translated_name} {vehs[i].Efficiency.GetSumAverage(3)}% {vehs[i].Balance.GetSum(3)/100/1000:F0}k s={vehs[i].stops} e={vehs[i].evaluated_on}", false);
 #endif
 
         // Step 3 Decision tree
@@ -93,14 +122,14 @@ public static class PlanEvaluateRoute_Patches
         VehicleBaseUser best = vehs[0]; // first
         VehicleBaseUser worst = vehs[^1]; // last one
 #if LOGGING
-        VehicleBaseEntity upgradeTmp = __instance.CallPrivateMethod<VehicleBaseEntity>("GetUpgrade", [company, best, manager, range]);
-        VehicleBaseEntity downgradeTmp = __instance.CallPrivateMethod<VehicleBaseEntity>("GetDowngrade", [company, worst, range]);
+        //VehicleBaseEntity upgradeTmp = __instance.CallPrivateMethod<VehicleBaseEntity>("GetUpgrade", [company, best, manager, range]);
+        //VehicleBaseEntity downgradeTmp = __instance.CallPrivateMethod<VehicleBaseEntity>("GetDowngrade", [company, worst, range]);
         string text = $" up={evaluation.Upgrade} dn={evaluation.Downgrade} b={best.ID} w={worst.ID}";
-        if (upgradeTmp == null) text += " up=none";
-        else text += $" {upgradeTmp.Tier}-{upgradeTmp.Translated_name}";
-        if (downgradeTmp == null) text += " dn=none";
-        else text += $" {downgradeTmp.Tier}-{downgradeTmp.Translated_name}";
-        string dec = "DEC_";
+        //if (upgradeTmp == null) text += " up=none";
+        //else text += $" {upgradeTmp.Tier}-{upgradeTmp.Translated_name}";
+        //if (downgradeTmp == null) text += " dn=none";
+        //else text += $" {downgradeTmp.Tier}-{downgradeTmp.Translated_name}";
+        string dec = "TMP_";
         if (evaluation.Upgrade)
         {
             if (vehs.Length < optimal) dec += "ADD_NEW";
@@ -120,7 +149,7 @@ public static class PlanEvaluateRoute_Patches
         }
         if (evaluation.Upgrade && evaluation.Downgrade)
         {
-            dec += "ERROR";
+            dec = "ERROR";
         }
         Log.Write(header + dec + text, false);
 
@@ -238,6 +267,10 @@ public static class PlanEvaluateRoute_Patches
 #endif
             scene.Session.Commands.Add(new CommandSell(company.ID, worst.ID, worst.Type, manager));
         }
+
+#if LOGGING
+        LogDecision("WAIT", best);
+#endif
 
         return false;
 
