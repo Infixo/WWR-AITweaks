@@ -1,5 +1,5 @@
 # Worldwide Rush Infixo's AI Tweaks
-![Worldwide Rush](https://store.steampowered.com/app/3325500/Worldwide_Rush/) mod that adds some AI enhancements to the game.
+[Worldwide Rush](https://store.steampowered.com/app/3325500/Worldwide_Rush/) mod that adds some AI enhancements to the game.
 
 ## Features
 
