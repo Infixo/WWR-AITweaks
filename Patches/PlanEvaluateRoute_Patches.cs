@@ -8,7 +8,9 @@ using STM.GameWorld;
 using STM.GameWorld.AI;
 using STM.GameWorld.Commands;
 using STM.GameWorld.Users;
+using STM.UI;
 using STMG.Engine;
+using System.Diagnostics;
 using Utilities;
 
 namespace AITweaks.Patches;
@@ -78,36 +80,36 @@ public static class PlanEvaluateRoute_Patches
         float vehicleGap = waitPerTrip / perVehicle;
         evaluation.gap = vehicleGap;
 
-        // optimal number of vehicles
+        // optimal number and tier of vehicles
         int optimal = line.Instructions.Cities.Length;
         if (line.Vehicle_type == 1) optimal /= 2; // train
         else if (line.Vehicle_type == 3) optimal *= 2; // ship
         if (line.Instructions.Cyclic) optimal--; // += line.Instructions.Cities.Length - 2;
         optimal = Math.Max(optimal, 2);
+        int optTier = 1 + vehicles.Sum(v => v.Entity_base.Tier) / vehicles.Length;
 
-        // Step 3 Sort vehicles descending
+        // Step 3 Sort vehicles in order for upgrade
         // This signature matches the Comparison<T> delegate required by Array.Sort.
-        //  < 0 v1 comes first
-        //  0 equal
-        //  > 0 v1 comes after v2
-#pragma warning disable CS8321 // Local function is declared but never used
-        static int CompareVehiclesDescending(VehicleBaseUser v1, VehicleBaseUser v2)
+        //  < 0 v1 comes first, 0 equal, > 0 v1 comes after v2
+        // TODO: this is used to find vehicles to upgrade/downgrade -> probably should account for efficiency too!
+        static int CompareVehicles(VehicleBaseUser v1, VehicleBaseUser v2)
         {
-            if (v1.Entity_base.Tier == v2.Entity_base.Tier)
-                return v2.Balance.GetSum(3).CompareTo(v1.Balance.GetSum(3));
-            else
-                return (int)(v2.Entity_base.Tier - v1.Entity_base.Tier);
+            if (v1.Entity_base.Tier != v2.Entity_base.Tier)
+                return (int)(v1.Entity_base.Tier - v2.Entity_base.Tier);
+            // if balance > 0 - sort by eff, if balance < 0 sort by balance
+            long val1 = v1.Balance.GetSum(3) > 0 ? v1.Efficiency.GetSumAverage(3) : v1.Balance.GetSum(3);
+            long val2 = v2.Balance.GetSum(3) > 0 ? v2.Efficiency.GetSumAverage(3) : v2.Balance.GetSum(3);
+            return (int)(val2 - val1);
         }
-        //Array.Sort(vehs, CompareVehiclesDescending);
-#pragma warning restore CS8321 // Local function is declared but never used
-        Array.Sort(vehs, (v1, v2) => v2.Balance.GetSum(3).CompareTo(v1.Balance.GetSum(3))); // balance only
+        Array.Sort(vehs, CompareVehicles);
+        //Array.Sort(vehs, (v1, v2) => v2.Balance.GetSum(3).CompareTo(v1.Balance.GetSum(3))); // balance only
 
 #if LOGGING
         // Debug part
 #pragma warning disable CS8602 // Dereference of a possibly null reference.
         string header = $"[{company.ID}-{line.ID+1}-{scene.Cities[manager.Hub.City].User.Name}] ";
 #pragma warning restore CS8602 // Dereference of a possibly null reference.
-        Log.Write(header + $"START n={vehs.Length} of {line.Routes.Count} /{optimal}  t={evaluation.throughput_min}/{evaluation.throughput_now}/{evaluation.throughput_max} b={evaluation.balance/100/1000:F0}k p={evaluation.profitability/100/1000:F0}k w={waiting}", false);
+        Log.Write(header + $"START n={vehs.Length}/{line.Routes.Count} opt={optimal}xT{optTier} t={evaluation.throughput_min}/{evaluation.throughput_now}/{evaluation.throughput_max} b={evaluation.balance/100/1000:F0}k p={evaluation.profitability/100/1000:F0}k w={waiting}", false);
         float eMin = (float)evaluation.throughput_min * 100f / (float)evaluation.throughput_max;
         float eThird = (float)(evaluation.throughput_max - evaluation.throughput_min) * 100f / 3f / (float)evaluation.throughput_max;
         Log.Write(header + $" eval {evaluation.throughput_now * 100m / evaluation.throughput_max:F1}% min={eMin:F1} range={eMin+eThird:F1}-{eMin+eThird*2:F1}", false);
@@ -122,13 +124,7 @@ public static class PlanEvaluateRoute_Patches
         VehicleBaseUser best = vehs[0]; // first
         VehicleBaseUser worst = vehs[^1]; // last one
 #if LOGGING
-        //VehicleBaseEntity upgradeTmp = __instance.CallPrivateMethod<VehicleBaseEntity>("GetUpgrade", [company, best, manager, range]);
-        //VehicleBaseEntity downgradeTmp = __instance.CallPrivateMethod<VehicleBaseEntity>("GetDowngrade", [company, worst, range]);
         string text = $" up={evaluation.Upgrade} dn={evaluation.Downgrade} b={best.ID} w={worst.ID}";
-        //if (upgradeTmp == null) text += " up=none";
-        //else text += $" {upgradeTmp.Tier}-{upgradeTmp.Translated_name}";
-        //if (downgradeTmp == null) text += " dn=none";
-        //else text += $" {downgradeTmp.Tier}-{downgradeTmp.Translated_name}";
         string dec = "TMP_";
         if (evaluation.Upgrade)
         {
@@ -199,18 +195,20 @@ public static class PlanEvaluateRoute_Patches
         // Scenario: Add a new vehicle
         if (evaluation.Upgrade)
         {
-            VehicleBaseEntity newVehicle = __instance.CallPrivateMethod<VehicleBaseEntity>("GetDowngrade", [company, best, range]);
-            newVehicle ??= best.Entity_base.Company.Entity.Vehicles[0];
+            // find "example to copy" - the first that is optimal tier (or higher); if not found - just first vehicle
+            best = vehs.FirstOrDefault(v => v.Entity_base.Tier >= optTier) ?? vehs[0];
+            // determine if copy the same or add 1 tier lower - depends of vehicle gap size, if gap is small - add lower tier
+            VehicleBaseEntity newVehicle = vehicleGap > 1f ? best.Entity_base : (__instance.CallPrivateMethod<VehicleBaseEntity>("GetDowngrade", [company, best, range]) ?? best.Entity_base.Company.Entity.Vehicles[0]);
             // generate commands
             NewRouteSettings settings = new(best);
             settings.SetVehicleEntity(newVehicle);
             long price = newVehicle.GetPrice(scene, company, scene.Cities[best.Hub.City].User);
-            if (best.Hub.Full())
-                price += best.Hub.GetNextLevelPrice(scene.Session);
+            //if (best.Hub.Full())
+                //price += best.Hub.GetNextLevelPrice(scene.Session); // Covered by GenPlan.Apply
 #if LOGGING
             LogDecision("ADDNEW", best, newVehicle);
 #endif
-            manager.AddNewPlan(new GeneratedPlan(1m, settings, price));
+            manager.AddNewPlan(new GeneratedPlan(1m, settings, price, null)); // no vehicle to sell
             MarkLineAsEvaluated();
             return false;
         }
@@ -231,14 +229,19 @@ public static class PlanEvaluateRoute_Patches
 #if LOGGING
                 LogDecision("DOWNGRADE", vehicle, downgrade);
 #endif
-                scene.Session.AddEndOfFrameAction(delegate
-                {
+                //scene.Session.AddEndOfFrameAction(delegate
+                //{
                     NewRouteSettings settings = new(vehicle);
                     settings.SetVehicleEntity(downgrade);
                     settings.upgrade = new UpgradeSettings(vehicle, scene);
-                    scene.Session.Commands.Add(new CommandSell(company.ID, vehicle.ID, vehicle.Type, manager));
-                    scene.Session.Commands.Add(new CommandNewRoute(company.ID, settings, open: false, manager));
-                });
+                // This should prevent from selling and not getting a new one!
+                //scene.Session.Commands.Add(new CommandSell(company.ID, vehicle.ID, vehicle.Type, manager)); 
+                //scene.Session.Commands.Add(new CommandNewRoute(company.ID, settings, open: false, manager));
+                long price = downgrade.GetPrice(scene, company, scene.Cities[vehicle.Hub.City].User);
+                price -= vehicle.GetValue();
+                decimal weight = __instance.CallPrivateMethod<long>("GetBalance", [vehicle]) * 2 / (decimal)price;
+                manager.AddNewPlan(new GeneratedPlan(weight, settings, price, vehicle));
+                //});
                 MarkLineAsEvaluated();
                 return false;
             }

@@ -54,8 +54,8 @@ public struct VehicleEvaluation
                 if (balance > 0 || gap > 0.5f)
                     return true;
             treshold = throughput_min + third; // 1/3 of min-max gap
-            if (throughput_now > treshold)
-                if (balance > profitability / 3 || gap > 0.5f) // this should relate to vehicle's innate profitability
+            if (throughput_now > treshold && gap > 0.5f)
+                if (balance > profitability / 3) // this should relate to vehicle's innate profitability
                     return true;
             if (throughput_now > throughput_min && gap > 1f && balance > 0)
                 return true;
