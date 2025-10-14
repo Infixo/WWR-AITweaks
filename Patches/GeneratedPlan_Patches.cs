@@ -24,6 +24,7 @@ public static  class GeneratedPlan_Patches
     public static void GeneratedPlan_Constructor_Postfix(GeneratedPlan __instance, decimal weight, NewRouteSettings settings, long price, VehicleBaseUser current /*= null*/)
 #pragma warning restore IDE0060 // Remove unused parameter
     {
+        __instance.age = 1; // there is later a cleanup when age > 2, so instead of changing that, we can start with +1
         __instance.SetPublicProperty("Price", price);
     }
 

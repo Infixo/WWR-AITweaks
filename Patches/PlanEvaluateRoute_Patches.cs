@@ -71,8 +71,8 @@ public static class PlanEvaluateRoute_Patches
             case 3: stationTime = MainData.Defaults.Ship_port_time; break;
         }
         float travelTime = (distance / evaluation.AvgSpeed + (float)(numStops - 1) * (float)stationTime / 3600f);
-        float numTrips = 24f / travelTime;
-        float months = 2f + (float)scene.Session.Second / 86400f; // TODO: 2 is related to GetSum(3) - we use 2 full months and a fraction of the current one
+        float numTrips = line.Instructions.Cyclic ? 24f / travelTime : 12f / travelTime;
+        float months = 1f + (float)scene.Session.Second / 86400f; // TODO: 2 is related to GetSum(3) - we use 2 full months and a fraction of the current one
         float monthlyThroughput = (float)evaluation.throughput_max / months;
         float perVehicle = monthlyThroughput / (float)vehs.Length;
         float waitingFraction = (float)waiting * ((float)vehs.Length / (float)line.Routes.Count);
@@ -97,8 +97,8 @@ public static class PlanEvaluateRoute_Patches
             if (v1.Entity_base.Tier != v2.Entity_base.Tier)
                 return (int)(v1.Entity_base.Tier - v2.Entity_base.Tier);
             // if balance > 0 - sort by eff, if balance < 0 sort by balance
-            long val1 = v1.Balance.GetSum(3) > 0 ? v1.Efficiency.GetSumAverage(3) : v1.Balance.GetSum(3);
-            long val2 = v2.Balance.GetSum(3) > 0 ? v2.Efficiency.GetSumAverage(3) : v2.Balance.GetSum(3);
+            long val1 = v1.Balance.GetSum(2) > 0 ? v1.Efficiency.GetSumAverage(2) : v1.Balance.GetSum(2);
+            long val2 = v2.Balance.GetSum(2) > 0 ? v2.Efficiency.GetSumAverage(2) : v2.Balance.GetSum(2);
             return (int)(val2 - val1);
         }
         Array.Sort(vehs, CompareVehicles);
@@ -116,7 +116,7 @@ public static class PlanEvaluateRoute_Patches
         Log.Write(header + $" line {distance:F0}km +{numStops} {evaluation.AvgSpeed:F1}kmh {travelTime:F1}h -> {numTrips:F1} trips", false);
         Log.Write(header + $" m={months:F2} t={monthlyThroughput:F0} {perVehicle:F1}/v wait {waitingFraction:F0} -> {waitPerTrip:F1}/tr -> {vehicleGap:F2} gap", false);
         for (int i = 0; i < vehs.Length; i++)
-            Log.Write(header + $" {i}. {vehs[i].ID}-{vehs[i].Entity_base.Tier}-{vehs[i].Entity_base.Translated_name} {vehs[i].Efficiency.GetSumAverage(3)}% {vehs[i].Balance.GetSum(3)/100/1000:F0}k s={vehs[i].stops} e={vehs[i].evaluated_on}", false);
+            Log.Write(header + $" {i}. {vehs[i].ID}-{vehs[i].Entity_base.Tier}-{vehs[i].Entity_base.Translated_name} {vehs[i].Efficiency.GetSumAverage(2)}% {vehs[i].Balance.GetSum(2)/100/1000:F0}k s={vehs[i].stops} e={vehs[i].evaluated_on}", false);
 #endif
 
         // Step 3 Decision tree
@@ -140,7 +140,7 @@ public static class PlanEvaluateRoute_Patches
         {
             dec += "WAIT";
             // check if too many
-            if (vehs.Length > optimal && worst.Balance.GetSum(3) < -evaluation.profitability / vehs.Length)
+            if (vehs.Length > optimal && worst.Balance.GetSum(2) < -evaluation.profitability / 2 / vehs.Length)
                 dec += "_SELL";
         }
         if (evaluation.Upgrade && evaluation.Downgrade)
@@ -249,7 +249,7 @@ public static class PlanEvaluateRoute_Patches
 
         // Scenario: Sell vehicle
         if (evaluation.Downgrade ||
-            (!evaluation.Downgrade && vehs.Length > optimal && worst.Balance.GetSum(3) < -evaluation.profitability / vehs.Length))
+            (!evaluation.Downgrade && vehs.Length > optimal && worst.Balance.GetSum(2) < -evaluation.profitability / 2 / vehs.Length))
         {
             if (vehs.Length >= 2)
             {
