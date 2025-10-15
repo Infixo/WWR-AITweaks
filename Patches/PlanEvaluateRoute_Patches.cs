@@ -1,16 +1,12 @@
 ﻿#define LOGGING
 
 using HarmonyLib;
-using STM;
 using STM.Data;
 using STM.Data.Entities;
 using STM.GameWorld;
 using STM.GameWorld.AI;
 using STM.GameWorld.Commands;
 using STM.GameWorld.Users;
-using STM.UI;
-using STMG.Engine;
-using System.Diagnostics;
 using Utilities;
 
 namespace AITweaks.Patches;
@@ -29,9 +25,9 @@ public static class PlanEvaluateRoute_Patches
         // Step 1
         // If there are already new vehicles on the line, there is no point in doing eval again, must wait till they start producing results.
         // New vehicles means either added by the player of AI. 1 new for 4 / 5 existing looks ok.
-        VehicleBaseUser[] vehs = [.. vehicles.ToArray().Where(v => v.Age > 0)];
-        if (vehs.Length == 0 || (vehicles.Length - vehs.Length) > vehicles.Length/5) // TODO: PARAMETER
-            return false;
+        VehicleBaseUser[] vehs = vehicles; // [.. vehicles.ToArray().Where(v => v.Age > 0)];
+        //if (vehs.Length == 0 || (vehicles.Length - vehs.Length) > vehicles.Length/5) // TODO: PARAMETER
+            //return false;
 
         // Step 1a
         // This is to prevent repeated evals when the data has not changed i.e. vehicles has not reached destination
@@ -61,16 +57,17 @@ public static class PlanEvaluateRoute_Patches
         // Step 2a Calculate more advanced metrics
         float distance = (float)line.GetTotalDistance();
         int numStops = line.Instructions.Cyclic ? line.Instructions.Cities.Length + 1 : line.Instructions.Cities.Length;
+        (int stationTime, float minTrips, float typeModifier) calcParams = (0, 2f, 1f);
+
         // Get station wait time
-        int stationTime = 0; // in seconds
         switch (line.Vehicle_type)
         {
-            case 0: stationTime = MainData.Defaults.Bus_station_time; break;
-            case 1: stationTime = MainData.Defaults.Train_station_time; break;
-            case 2: stationTime = MainData.Defaults.Plane_airport_time; break;
-            case 3: stationTime = MainData.Defaults.Ship_port_time; break;
+            case 0: calcParams = (MainData.Defaults.Bus_station_time, 2f, 1.5f); break; // bus
+            case 1: calcParams = (MainData.Defaults.Train_station_time, 4f, 0.5f); break; // train
+            case 2: calcParams = (MainData.Defaults.Plane_airport_time, 4f, 2f); break; // plane
+            case 3: calcParams = (MainData.Defaults.Ship_port_time, 1.5f, 2f); break; // ship
         }
-        float travelTime = (distance / evaluation.AvgSpeed + (float)(numStops - 1) * (float)stationTime / 3600f);
+        float travelTime = (distance / evaluation.AvgSpeed + (float)(numStops - 1) * (float)calcParams.stationTime / 3600f);
         float numTrips = line.Instructions.Cyclic ? 24f / travelTime : 12f / travelTime;
         float months = 1f + (float)scene.Session.Second / 86400f; // TODO: 2 is related to GetSum(3) - we use 2 full months and a fraction of the current one
         float monthlyThroughput = (float)evaluation.throughput_max / months;
@@ -80,12 +77,17 @@ public static class PlanEvaluateRoute_Patches
         float vehicleGap = waitPerTrip / perVehicle;
         evaluation.gap = vehicleGap;
 
-        // optimal number and tier of vehicles
-        int optimal = line.Instructions.Cities.Length;
-        if (line.Vehicle_type == 1) optimal /= 2; // train
-        else if (line.Vehicle_type == 3) optimal *= 2; // ship
-        if (line.Instructions.Cyclic) optimal--; // += line.Instructions.Cities.Length - 2;
-        optimal = Math.Max(optimal, 2);
+        // optimal number vehicles
+        float fOptimal = (float)line.Instructions.Cities.Length;
+        if (numTrips < calcParams.minTrips)
+            fOptimal *= calcParams.minTrips / numTrips;
+        fOptimal *= calcParams.typeModifier;
+        //if (line.Vehicle_type == 1) optimal /= 2; // train
+        //else if (line.Vehicle_type == 3) optimal *= 2; // ship
+        //if (line.Instructions.Cyclic) optimal--; // += line.Instructions.Cities.Length - 2;
+        int optimal = Math.Max((int)fOptimal, 2);
+
+        // optimal tier
         int optTier = 1 + vehicles.Sum(v => v.Entity_base.Tier) / vehicles.Length;
 
         // Step 3 Sort vehicles in order for upgrade
@@ -107,16 +109,19 @@ public static class PlanEvaluateRoute_Patches
 #if LOGGING
         // Debug part
 #pragma warning disable CS8602 // Dereference of a possibly null reference.
-        string header = $"[{company.ID}-{line.ID+1}-{scene.Cities[manager.Hub.City].User.Name}] ";
+        string header = $"{company.ID}-{line.ID+1}-{scene.Cities[manager.Hub.City].User.Name}";
+        line.NewEvaluation(header);
+        header = $"[{header}] ";
 #pragma warning restore CS8602 // Dereference of a possibly null reference.
-        Log.Write(header + $"START n={vehs.Length}/{line.Routes.Count} opt={optimal}xT{optTier} t={evaluation.throughput_min}/{evaluation.throughput_now}/{evaluation.throughput_max} b={evaluation.balance/100/1000:F0}k p={evaluation.profitability/100/1000:F0}k w={waiting}", false);
+        void LogEvalLine(string text) { line.AddEvaluationText(text); Log.Write(header + " " + text, false); }
+        LogEvalLine($"START n={vehs.Length}/{line.Routes.Count} opt={fOptimal:F1}xT{optTier} t={evaluation.throughput_min}/{evaluation.throughput_now}/{evaluation.throughput_max} b={evaluation.balance/100/1000:F0}k p={evaluation.profitability/100/1000:F0}k w={waiting}");
         float eMin = (float)evaluation.throughput_min * 100f / (float)evaluation.throughput_max;
         float eThird = (float)(evaluation.throughput_max - evaluation.throughput_min) * 100f / 3f / (float)evaluation.throughput_max;
-        Log.Write(header + $" eval {evaluation.throughput_now * 100m / evaluation.throughput_max:F1}% min={eMin:F1} range={eMin+eThird:F1}-{eMin+eThird*2:F1}", false);
-        Log.Write(header + $" line {distance:F0}km +{numStops} {evaluation.AvgSpeed:F1}kmh {travelTime:F1}h -> {numTrips:F1} trips", false);
-        Log.Write(header + $" m={months:F2} t={monthlyThroughput:F0} {perVehicle:F1}/v wait {waitingFraction:F0} -> {waitPerTrip:F1}/tr -> {vehicleGap:F2} gap", false);
+        LogEvalLine($"eval {evaluation.throughput_now * 100m / evaluation.throughput_max:F1}% min={eMin:F1} range={eMin+eThird:F1}-{eMin+eThird*2:F1}");
+        LogEvalLine($"line {distance:F0}km +{numStops} {evaluation.AvgSpeed:F1}kmh {travelTime:F1}h -> {numTrips:F1} trips");
+        LogEvalLine($"thru m={months:F2} t={monthlyThroughput:F0} {perVehicle:F1}/v wait {waitingFraction:F0} -> {waitPerTrip:F1}/tr -> {vehicleGap:F2} gap");
         for (int i = 0; i < vehs.Length; i++)
-            Log.Write(header + $" {i}. {vehs[i].ID}-{vehs[i].Entity_base.Tier}-{vehs[i].Entity_base.Translated_name} {vehs[i].Efficiency.GetSumAverage(2)}% {vehs[i].Balance.GetSum(2)/100/1000:F0}k s={vehs[i].stops} e={vehs[i].evaluated_on}", false);
+            LogEvalLine($"{i}. {vehs[i].ID}-{vehs[i].Entity_base.Tier}-{vehs[i].Entity_base.Translated_name} {vehs[i].Efficiency.GetSumAverage(2)}% {vehs[i].Balance.GetSum(2)/100/1000:F0}k s={vehs[i].stops} e={vehs[i].evaluated_on}");
 #endif
 
         // Step 3 Decision tree
@@ -147,12 +152,12 @@ public static class PlanEvaluateRoute_Patches
         {
             dec = "ERROR";
         }
-        Log.Write(header + dec + text, false);
+        LogEvalLine(dec + text);
 
         void LogDecision(string type, VehicleBaseUser vh1, VehicleBaseEntity? vh2 = null)
         {
             string vh2txt = vh2 != null ? $"  vh2= {vh2.Tier}-{vh2.Translated_name}" : "";
-            Log.Write($"{header}{type} up={evaluation.Upgrade} dn={evaluation.Downgrade} vh1= {vh1.ID}-{vh1.Entity_base.Tier}-{vh1.Entity_base.Translated_name} {vh2txt}", false);
+            LogEvalLine($"{type} up={evaluation.Upgrade} dn={evaluation.Downgrade} vh1= {vh1.ID}-{vh1.Entity_base.Tier}-{vh1.Entity_base.Translated_name} {vh2txt}");
         }
 #endif
         // this is to prevent repeated evals when the data has not changed i.e. vehicles has not reached destination

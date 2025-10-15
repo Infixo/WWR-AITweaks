@@ -36,7 +36,7 @@ public static  class GeneratedPlan_Patches
         __result = false; // this will keep the plan, only true removes the plan
 
         // Route good?
-        if (__instance.Settings.Cities.Count == 0 || __instance.Settings.Cities.Count > 10)
+        if (__instance.Settings.Cities.Count == 0) // || __instance.Settings.Cities.Count > 10) // WHY LIMITER???
         {
             __result = true; return false;
         }

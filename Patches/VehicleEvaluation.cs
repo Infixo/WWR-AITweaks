@@ -1,7 +1,5 @@
 using STM.Data.Entities;
-using STM.GameWorld;
 using STM.GameWorld.Users;
-using Utilities;
 
 namespace AITweaks.Patches;
 
@@ -110,14 +108,5 @@ public struct VehicleEvaluation
                 throughput_min += (decimal)(throughput * minCap / maxCap); // calculate min from capacities ratio
             }
         }
-    }
-
-    private long GetBest(YearlyMetrics metrics)
-    {
-        if (metrics.GetCurrentMonth() == 0L)
-        {
-            return metrics.GetLastMonth();
-        }
-        return metrics.GetCurrentMonth();
     }
 }
