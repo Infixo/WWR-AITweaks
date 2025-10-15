@@ -45,12 +45,4 @@ public static class ModEntry
         // do other stuff here to initialize
         return 0;
     }
-
-    public static void OnDispose()
-    {
-        //Log.Write(nameof(OnDispose));
-        // Harmony
-        //var harmony = new Harmony(harmonyId);
-        //harmony.UnpatchAll(harmonyId);
-    }
 }
