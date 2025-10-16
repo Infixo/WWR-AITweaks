@@ -4,11 +4,15 @@
 ## Features
 
 ### Maintain routes
-Currently only one feature is implemented - better logic for evaluating lines in the Hub Manager's Maintain mode. Please consider this feature as experimental atm, in the beta testing phase. For this purpoose an extensive logging is implemented.
-- The line is evaluated for the last quarter and based on efficiency, optimal range is determined.
+Currently only one feature is implemented - better logic for evaluating and maintaining lines for the Hub Manager's Maintain mode.
+- The line is evaluated for the last 2 months and based on efficiency, throughput and vehicles' capacities, optimal range is determined.
 - Optimal range is betwen 1/3 and 2/3 of minimum efficiency and full (100%) efficiency, where minimum efficiency is required for the line to be profitable at all.
-- Number of waiting passengers and average trip trime is also taken into consideration.
+- Number of waiting passengers and average trip trime are also taken into consideration.
 - Based on the above, the manager decides if the line should be upgraded or downgraded and/or if more/less vehicles are needed.
+- (0.2) All vehicle manipulations go thorugh Generated Plan which assures that a vehicle is not sold when the replacement is not possible.
+- (0.2) Balanced line growth - manager will try for all vehicles be of similar tier.
+- (0.2) Optimal number of vehicles accounts for trip time.
+- (0.2) Evaluation results can be displayed as a tooltip by UITweaks.
 - IMPORTANT NOTES.
   - The process of upgrading/downgrading involves first selling the old one, and after that buying a new one. This logic also exists in the vanilla gamem btw. It is imperative to make sure the hub manager has enough funds to acquire a new vehicle. Otherwise, you may end up with an empty line. I recommend using Budget setting and set it to the value that allows to buy the best vehicle currently available.
   - Only evaluation core and decision logic is changed, other supporting routines (e.g. selecting a better or worse vehicle) are still vanilla verions.
@@ -26,6 +30,12 @@ Currently only one feature is implemented - better logic for evaluating lines in
 - None atm.
 
 ### Changelog
+- v0.2.0 (2025-10-16)
+  - Evaluation tooltip, rewritten optimal number of vehicles.
+  - More dynamic evaluation based on 2 months data (instead of a quarter).
+  - Fixed selling vehicle by a manager and getting a replacement.
+  - Fixed issue with repeated generated plans.
+  - Removed: Extensive logging is off.
 - v0.1.0 (2025-10-11)
   - Initial release.
 

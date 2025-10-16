@@ -1,4 +1,4 @@
-﻿#define LOGGING
+﻿//#define LOGGING
 
 using HarmonyLib;
 using Microsoft.Xna.Framework;
@@ -27,11 +27,10 @@ public static class PlanEvaluateRoute_Patches
         if (manager == null && company.AI == null) return false; // just a precaution and to simplify code later
 
         // Step 1
-        // If there are already new vehicles on the line, there is no point in doing eval again, must wait till they start producing results.
-        // New vehicles means either added by the player of AI. 1 new for 4 / 5 existing looks ok.
-        VehicleBaseUser[] vehs = vehicles; // [.. vehicles.ToArray().Where(v => v.Age > 0)];
-                                           //if (vehs.Length == 0 || (vehicles.Length - vehs.Length) > vehicles.Length/5) // TODO: PARAMETER
-                                           //return false;
+        // Exclude vehicles that have not yet transported anyone (e.g. totally new lines added to hubs with managers)
+        VehicleBaseUser[] vehs = [.. vehicles.ToArray().Where(v => v.Throughput.GetSum(2) > 0)];
+        if (vehs.Length == 0 || (vehicles.Length - vehs.Length) > vehicles.Length/5) // TODO: PARAMETER
+            return false;
 
         // Step 1a
         // This is to prevent repeated evals when the data has not changed i.e. vehicles has not reached destination
@@ -125,17 +124,25 @@ public static class PlanEvaluateRoute_Patches
 #endif
         }
 
+        string GetBalanceTxt(long value)
+        {
+            decimal ks = scene.currency.Convert((decimal)value);
+            if (ks > 100000000m) return $"{ks/1000000m:F0}M";
+            if (ks > 1000000m) return $"{ks/1000000m:F1}M";
+            return $"{ks/1000:F0}k";
+        }
+
         float eMin = (float)evaluation.throughput_min * 100f / (float)evaluation.throughput_max;
         float eThird = (float)(evaluation.throughput_max - evaluation.throughput_min) * 100f / 3f / (float)evaluation.throughput_max;
         string upDown = "up=" + (evaluation.Upgrade ? 1 : 0) + " dn=" + (evaluation.Downgrade ? 1 : 0);
-        LogEvalLine($"START n={vehs.Length}/{line.Routes.Count} opt={fOptimal:F1}xT{optTier} b={evaluation.balance / 100 / 1000:F0}k p={evaluation.profitability / 100 / 1000:F0}k");
+        LogEvalLine($"START n={vehs.Length}/{line.Routes.Count} opt={fOptimal:F1}xT{optTier} b={GetBalanceTxt(evaluation.balance)} p={GetBalanceTxt(evaluation.profitability)}");
         LogEvalLine($"line {distance:F0}km +{numStops} {evaluation.AvgSpeed:F0}kmh {travelTime:F1}h {numTrips:F1}tr");
         LogEvalLine($"thru min={eMin:F1}% {evaluation.throughput_min}/{evaluation.throughput_now}/{evaluation.throughput_max} w={waiting}");
         LogEvalLine($"eval {evaluation.throughput_now * 100m / evaluation.throughput_max:F1}% ({eMin + eThird:F1}-{eMin + eThird * 2:F1}) gap={vehicleGap:F2} {upDown}");
         LogEvalLine($"vgap {months:F2}m {monthlyThroughput:F0}/m {perVehicle:F0}/v wf={waitingFraction:F0} {waitPerTrip:F0}/tr");
         for (int i = 0; i < vehs.Length; i++)
             if (i < 2 || i > vehs.Length - 3)
-                LogEvalLine($"{i+1}. {vehs[i].ID}-{vehs[i].Entity_base.Tier}-{vehs[i].Entity_base.Translated_name} {vehs[i].Efficiency.GetSumAverage(2)}% {vehs[i].Balance.GetSum(2) / 100 / 1000:F0}k s={vehs[i].stops} e={vehs[i].evaluated_on}");
+                LogEvalLine($"{i+1}. {vehs[i].ID}-{vehs[i].Entity_base.Tier}-{vehs[i].Entity_base.Translated_name} {vehs[i].Efficiency.GetSumAverage(2)}% b={GetBalanceTxt(vehs[i].Balance.GetSum(2))} s={vehs[i].stops} e={vehs[i].evaluated_on}");
 
         // Step 3 Decision tree
         int range = __instance.CallPrivateMethod<int>("GetRange", [vehs]);
@@ -345,16 +352,16 @@ public static class PlanEvaluateRoute_Patches
 public static class LineEvaluation
 {
     // Data extensions
-    public class ExtraData
+    internal class ExtraData
     {
-        public string Header = "(unknown)"; // companyId-lineId-hubName
-        public readonly List<List<string>> Text = []; // text lines
+        internal string Header = "(unknown)"; // companyId-lineId-hubName
+        internal readonly List<List<string>> Text = []; // text lines
     }
     private static readonly ConditionalWeakTable<Line, ExtraData> _extras = [];
-    public static ExtraData Extra(this Line line) => _extras.GetOrCreateValue(line);
+    internal static ExtraData Extra(this Line line) => _extras.GetOrCreateValue(line);
 
 
-    public static void NewEvaluation(this Line line, string header)
+    internal static void NewEvaluation(this Line line, string header)
     {
         line.Extra().Header = header;
         List<string> newEval = [$"[{DateTime.Now:HH:mm:ss}]  {header}"];
@@ -362,9 +369,14 @@ public static class LineEvaluation
         if (line.Extra().Text.Count == 4) line.Extra().Text.RemoveAt(3); // keep only last 3 evals
     }
 
-    public static void AddEvaluationText(this Line line, string text)
+    internal static void AddEvaluationText(this Line line, string text)
     {
         line.Extra().Text.First().Add(text);
+    }
+
+    public static int GetNumEvaluations(Line line)
+    {
+        return line.Extra().Text.Count;
     }
 
     public static TooltipPreset GetEvaluationTooltip(Line line, GameEngine engine)
