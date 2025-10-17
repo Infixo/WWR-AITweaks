@@ -5,9 +5,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <Product>WWR AITweaks</Product>
-    <InformationalVersion>0.2.0</InformationalVersion>
-    <AssemblyVersion>0.2.0</AssemblyVersion>
-    <FileVersion>0.2.0</FileVersion>
+    <InformationalVersion>0.2.1</InformationalVersion>
+    <AssemblyVersion>0.2.1</AssemblyVersion>
+    <FileVersion>0.2.1</FileVersion>
     <Copyright>Copyright (C) 2025 Infixo</Copyright>
   </PropertyGroup>
   
@@ -34,13 +34,11 @@
       <HintPath>$(GameDir)\Worldwide Rush.dll</HintPath>
     </Reference>
   </ItemGroup>
-  
-  
+    
   <Target Name="PostBuild" AfterTargets="PostBuildEvent">
     <Exec Command="copy /Y &quot;$(TargetDir)$(ProjectName).dll&quot; &quot;$(GameDir)\Mods\$(ProjectName).dll&quot;&#xD;&#xA;copy /Y &quot;$(TargetDir)$(ProjectName).pdb&quot; &quot;$(GameDir)\Mods\$(ProjectName).pdb&quot;" />
   </Target>
   
-  
   <Import Project="..\WWR-Utilities\WWR-Utilities.projitems" Label="Shared" />
-  
+
 </Project>

@@ -28,9 +28,9 @@ public static class PlanEvaluateRoute_Patches
 
         // Step 1
         // Exclude vehicles that have not yet transported anyone (e.g. totally new lines added to hubs with managers)
-        VehicleBaseUser[] vehs = [.. vehicles.ToArray().Where(v => v.Throughput.GetSum(2) > 0)];
-        if (vehs.Length == 0 || (vehicles.Length - vehs.Length) > vehicles.Length/5) // TODO: PARAMETER
-            return false;
+        VehicleBaseUser[] vehs = vehicles; //  [.. vehicles.ToArray().Where(v => v.Throughput.GetSum(2) > 0)];
+        //if (vehs.Length == 0 || (vehicles.Length - vehs.Length) > vehicles.Length/5) // TODO: PARAMETER
+            //return false;
 
         // Step 1a
         // This is to prevent repeated evals when the data has not changed i.e. vehicles has not reached destination

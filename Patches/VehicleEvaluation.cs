@@ -99,13 +99,32 @@ public struct VehicleEvaluation
             balance += vehicle.Balance.GetOffset(offset);
             profitability += profit;
             long _efficiency = vehicle.Efficiency.GetOffset(offset);
-            if (_efficiency > 0)
+            long throughput = vehicle.Throughput.GetOffset(offset); // now
+            if (throughput > 0)
             {
-                long throughput = vehicle.Throughput.GetOffset(offset); // now
-                throughput_now += (decimal)throughput;
-                throughput = throughput * 100 / _efficiency; // calculate max from efficiency
-                throughput_max += (decimal)throughput;
-                throughput_min += (decimal)(throughput * minCap / maxCap); // calculate min from capacities ratio
+                if (_efficiency > 0)
+                {
+                    throughput_now += (decimal)throughput;
+                    throughput = throughput * 100 / _efficiency; // calculate max from efficiency
+                    throughput_max += (decimal)throughput;
+                    throughput_min += (decimal)(throughput * minCap / maxCap); // calculate min from capacities ratio
+                }
+                // 2025-10-17 Fix for a very rare case where both efficiency and throughput are 0, but not at the same time
+                else  // (_efficiency == 0)
+                {
+                    // Eff=0 means travelling empty - we cannot calculate actual throughput numbers
+                    // Assumption - capacity values hold
+                    throughput_now += (decimal)throughput;
+                    throughput_max += (decimal)maxCap; // cannot calculate this since Eff=0
+                    throughput_min += (decimal)minCap;
+                }
+            }
+            else
+            {
+                // Throughput=0 - destination not yet reached!
+                throughput_now += (decimal)(maxCap * _efficiency) / 100m; // if Eff=0 then going empty and now=0 which is ok!
+                throughput_max += (decimal)maxCap;
+                throughput_min += (decimal)minCap;
             }
         }
     }

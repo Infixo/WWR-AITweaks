@@ -30,6 +30,8 @@ Currently only one feature is implemented - better logic for evaluating and main
 - None atm.
 
 ### Changelog
+- v0.2.1 (2025-10-17)
+  - Fixed a rare issue where a line has 1 vehicle and its eff & thr are 0 but not at the same month.
 - v0.2.0 (2025-10-16)
   - Evaluation tooltip, rewritten optimal number of vehicles.
   - More dynamic evaluation based on 2 months data (instead of a quarter).
