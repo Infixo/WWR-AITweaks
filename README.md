@@ -11,7 +11,7 @@ Currently only one feature is implemented - better logic for evaluating and main
 - Based on the above, the manager decides if the line should be upgraded or downgraded and/or if more/less vehicles are needed.
 - (0.2) All vehicle manipulations go thorugh Generated Plan which assures that a vehicle is not sold when the replacement is not possible.
 - (0.2) Balanced line growth - manager will try for all vehicles be of similar tier.
-- (0.2) Optimal number of vehicles accounts for trip time.
+- (0.2) Optimal number of vehicles accounts for trip time and type of vehicles.
 - (0.2) Evaluation results can be displayed as a tooltip by UITweaks.
 - IMPORTANT NOTES.
   - The process of upgrading/downgrading involves first selling the old one, and after that buying a new one. This logic also exists in the vanilla gamem btw. It is imperative to make sure the hub manager has enough funds to acquire a new vehicle. Otherwise, you may end up with an empty line. I recommend using Budget setting and set it to the value that allows to buy the best vehicle currently available.
@@ -30,6 +30,9 @@ Currently only one feature is implemented - better logic for evaluating and main
 - None atm.
 
 ### Changelog
+- v0.3.0 (2025-10-18)
+  - Improved upgrading logic.
+  - Improvement on how number of vehicles is calculated.
 - v0.2.1 (2025-10-17)
   - Fixed a rare issue where a line has 1 vehicle and its eff & thr are 0 but not at the same month.
 - v0.2.0 (2025-10-16)

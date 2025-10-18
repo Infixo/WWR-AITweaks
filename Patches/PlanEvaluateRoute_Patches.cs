@@ -60,15 +60,15 @@ public static class PlanEvaluateRoute_Patches
         // Step 2a Calculate more advanced metrics
         float distance = (float)line.GetTotalDistance();
         int numStops = line.Instructions.Cyclic ? line.Instructions.Cities.Length + 1 : line.Instructions.Cities.Length;
-        (int stationTime, float minTrips, float typeModifier) calcParams = (0, 2f, 1f);
+        (int stationTime, float frequency, float cities) calcParams = (0, 2f, 1f); // freq - how many times vehicles visit a city, cities - modifier for number of cities
 
         // Get station wait time
         switch (line.Vehicle_type)
         {
-            case 0: calcParams = (MainData.Defaults.Bus_station_time, 2f, 1.5f); break; // bus
-            case 1: calcParams = (MainData.Defaults.Train_station_time, 4f, 0.5f); break; // train
-            case 2: calcParams = (MainData.Defaults.Plane_airport_time, 4f, 2f); break; // plane
-            case 3: calcParams = (MainData.Defaults.Ship_port_time, 1.5f, 2f); break; // ship
+            case 0: calcParams = (MainData.Defaults.Bus_station_time, 10f, 1f); break; // bus
+            case 1: calcParams = (MainData.Defaults.Train_station_time, 6f, 0.25f); break; // train
+            case 2: calcParams = (MainData.Defaults.Plane_airport_time, 4f, 1.5f); break; // plane
+            case 3: calcParams = (MainData.Defaults.Ship_port_time, 2.5f, 0.5f); break; // ship, 2 for large, 3 for medium/small
         }
         float travelTime = (distance / evaluation.AvgSpeed + (float)(numStops - 1) * (float)calcParams.stationTime / 3600f);
         float numTrips = line.Instructions.Cyclic ? 24f / travelTime : 12f / travelTime;
@@ -81,14 +81,9 @@ public static class PlanEvaluateRoute_Patches
         evaluation.gap = vehicleGap;
 
         // optimal number vehicles
-        float fOptimal = (float)line.Instructions.Cities.Length;
-        if (numTrips < calcParams.minTrips)
-            fOptimal *= calcParams.minTrips / numTrips;
-        fOptimal *= calcParams.typeModifier;
-        //if (line.Vehicle_type == 1) optimal /= 2; // train
-        //else if (line.Vehicle_type == 3) optimal *= 2; // ship
-        //if (line.Instructions.Cyclic) optimal--; // += line.Instructions.Cities.Length - 2;
-        int optimal = Math.Max((int)fOptimal, 2);
+        float fOptimal = (float)line.Instructions.Cities.Length * calcParams.cities;
+        fOptimal += calcParams.frequency * travelTime / 12f;
+        int optimal = Math.Max((int)(fOptimal+0.5f), 2);
 
         // optimal tier
         int optTier = 1 + vehicles.Sum(v => v.Entity_base.Tier) / vehicles.Length;
@@ -188,20 +183,21 @@ public static class PlanEvaluateRoute_Patches
         }
 
         // Scenario: Upgrade existing
-        if (evaluation.Upgrade && vehs.Length >= optimal)
+        const float GapPerUpgrade = 1.25f; // PARAM: 1f gap per upgrade, could be higher / lower
+        if (evaluation.Upgrade && (vehs.Length >= optimal || evaluation.gap > 2f * GapPerUpgrade))
         {
+            int maxUpgrades = Math.Max(1, (int)(evaluation.gap / GapPerUpgrade)); // ... but at least 1 upgrade
+            int numUpgrades = 0; // how many upgrades are scheduled
             // Find vehicle to upgrade, strting with best; if none can be upgraded then ADD_NEW
-            VehicleBaseUser? vehicle = null;
-            VehicleBaseEntity? upgrade = null;
-            for (int i = 0; i < vehs.Length && upgrade == null; i++)
+            for (int i = 0; i < vehs.Length && numUpgrades < maxUpgrades; i++) // stop when all tried or we did enough upgrades
             {
-                vehicle = vehs[i];
-                upgrade = __instance.CallPrivateMethod<VehicleBaseEntity>("GetUpgrade", [company, vehicle, manager, range]);
-            }
-            if (upgrade != null && vehicle != null)
-            {
-                // LOGIC
-                //vehicle.evaluated_on = vehicle.stops;
+                VehicleBaseUser vehicle = vehs[i];
+                if (vehicle.Entity_base.Tier >= optTier) continue; // do not upgrade if we reached optimal tier - this will allow to add new before upgrading to T6
+                VehicleBaseEntity? upgrade = __instance.CallPrivateMethod<VehicleBaseEntity>("GetUpgrade", [company, vehicle, manager, range]);
+                if (upgrade == null) continue; // get next one
+                //{
+                    // LOGIC
+                    //vehicle.evaluated_on = vehicle.stops;
                 NewRouteSettings settings = new(vehicle);
                 settings.SetVehicleEntity(upgrade);
                 long price = upgrade.GetPrice(scene, company, scene.Cities[vehicle.Hub.City].User);
@@ -210,6 +206,17 @@ public static class PlanEvaluateRoute_Patches
                 decimal weight = __instance.CallPrivateMethod<long>("GetBalance", [vehicle]) * 2;
                 LogDecision("UPGRADE", vehicle, upgrade);
                 manager.AddNewPlan(new GeneratedPlan(weight / (decimal)price, settings, price, vehicle));
+                vehicleGap -= GapPerUpgrade;
+                numUpgrades++;
+                //}
+            }
+            // when to go to ADDNEW? a) nothing was upgraded b) not enough upgrades
+            // original stop: upgrade done and vehs>=optimal -> not enough if gap is still big?
+            bool addNew = false;
+            if (numUpgrades == 0) addNew = true;
+            else if (vehs.Length < optimal && vehicleGap > 1f) addNew = true;
+            if (!addNew)
+            {
                 MarkLineAsEvaluated();
                 return false;
             }
@@ -315,7 +322,8 @@ public static class PlanEvaluateRoute_Patches
         }
         if (next.Tier > original.Tier || (next.Tier == original.Tier && next.Capacity > original.Capacity))
         {
-            __result = __instance.GetPrivateField<long>("wealth") > next.Price;
+            // price will be checked against wealth during command execution, as long as there are available vehicles we should try to get one
+            __result = true; //  __instance.GetPrivateField<long>("wealth") > next.Price;
             //return false;
         }
         return false;

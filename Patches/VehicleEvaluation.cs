@@ -27,7 +27,7 @@ public struct VehicleEvaluation
 
     public readonly float AvgCapacity => sumCapacity / sumSpeed;
 
-    public bool Downgrade
+    public readonly bool Downgrade
     {
         get
         {
@@ -42,22 +42,22 @@ public struct VehicleEvaluation
         }
     }
 
-    public bool Upgrade
+    public readonly bool Upgrade
     {
         get
         {
             decimal third = (throughput_max - throughput_min) / 3;
             decimal treshold = throughput_max - third; // 2/3 of min-max gap
             if (throughput_now > treshold) // There are vehicles that need 80% to be even profitable; probably could relate to difficulty
-                if (balance > 0 || gap > 0.5f)
+                if (balance > profitability / 5 || gap > 0.5f)
                     return true;
             treshold = throughput_min + third; // 1/3 of min-max gap
-            if (throughput_now > treshold && gap > 0.5f)
+            if (throughput_now > treshold && gap > 0.75f)
                 if (balance > profitability / 3) // this should relate to vehicle's innate profitability
                     return true;
-            if (throughput_now > throughput_min && gap > 1f && balance > 0)
+            if (throughput_now > throughput_min && gap > 1.5f && balance > profitability / 4)
                 return true;
-            return gap > 1.5f && balance > -profitability / 4;
+            return gap > 2.5f && balance > 0;
         }
     }
 
