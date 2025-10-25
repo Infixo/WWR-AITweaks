@@ -265,6 +265,8 @@ public static class PlanEvaluateRoute_Patches
                 //scene.Session.Commands.Add(new CommandNewRoute(company.ID, settings, open: false, manager));
                 long price = downgrade.GetPrice(scene, company, scene.Cities[vehicle.Hub.City].User);
                 price -= vehicle.GetValue();
+                // 2025-10-25 When downgrading it is possible to get price=0, so weight cannot be derived from that;
+                if (price <= 0L) price = 1L;
                 decimal weight = __instance.CallPrivateMethod<long>("GetBalance", [vehicle]) * 2 / (decimal)price;
                 manager.AddNewPlan(new GeneratedPlan(weight, settings, price, vehicle));
                 //});

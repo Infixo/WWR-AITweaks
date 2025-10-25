@@ -30,6 +30,9 @@ Currently only one feature is implemented - better logic for evaluating and main
 - None atm.
 
 ### Changelog
+- v0.3.1 (2025-10-25)
+  - Updated for Patch 1.1.13
+  - Fixed crash when downgrade net price is 0.
 - v0.3.0 (2025-10-18)
   - Improved upgrading logic.
   - Improvement on how number of vehicles is calculated.
