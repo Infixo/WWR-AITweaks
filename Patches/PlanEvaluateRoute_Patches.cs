@@ -318,7 +318,6 @@ public static class PlanEvaluateRoute_Patches
             if (_n.Tier > _o.Tier || (_n.Tier == _o.Tier && _n.Max_capacity > _o.Max_capacity))
             {
                 __result = __instance.GetPrivateField<long>("wealth") > next.Price;
-                //return false;
             }
             return false;
         }
@@ -347,11 +346,6 @@ public static class PlanEvaluateRoute_Patches
         if (next.CanBuy(company, hub.Longitude) && original.Price > next.Price)
         {
             __result = true;
-            //if (original.Tier >= next.Tier)
-            //{
-            //return original.Real_min_passengers > next.Real_min_passengers;
-            //}
-            //return false;
         }
         return false;
     }
@@ -364,19 +358,24 @@ public static class LineEvaluation
     // Data extensions
     internal class ExtraData
     {
-        internal string Header = "(unknown)"; // companyId-lineId-hubName
+        internal string Header = "?"; // companyId-lineId-hubName
         internal readonly List<List<string>> Text = []; // text lines
     }
     private static readonly ConditionalWeakTable<Line, ExtraData> _extras = [];
     internal static ExtraData Extra(this Line line) => _extras.GetOrCreateValue(line);
 
-
+    // 2025-10-26 Race condition happens here if the line is split into 2+ hubs!
     internal static void NewEvaluation(this Line line, string header)
     {
-        line.Extra().Header = header;
+        string _header = line.Extra().Header;
+        line.Extra().Header = _header == "?" ? header : _header + "|" + header;
         List<string> newEval = [$"[{DateTime.Now:HH:mm:ss}]  {header}"];
-        line.Extra().Text.Insert(0, newEval);
-        if (line.Extra().Text.Count == 4) line.Extra().Text.RemoveAt(3); // keep only last 3 evals
+        List<List<string>> _text = line.Extra().Text;
+        lock (_text)
+        {
+            _text.Add(newEval);
+            if (_text.Count == 4) _text.RemoveAt(3); // keep only last 3 evals
+        }
     }
 
     internal static void AddEvaluationText(this Line line, string text)
@@ -394,12 +393,16 @@ public static class LineEvaluation
         if (line.Extra().Text.Count == 0)
             return TooltipPreset.Get("No evaluations", engine, can_lock: true);
         TooltipPreset tooltip = TooltipPreset.Get(line.Extra().Header, engine, can_lock: true);
-        for (int i = 0; i < line.Extra().Text.Count; i++)
+        List<List<string>> _text = line.Extra().Text;
+        lock (_text)
         {
-            if (i > 0) tooltip.AddSeparator();
-            tooltip.AddBoldLabel(line.Extra().Text[i][0]);
-            for (int j = 1; j < line.Extra().Text[i].Count; j++)
-                tooltip.AddDescription(line.Extra().Text[i][j]);
+            for (int i = 0; i < _text.Count; i++)
+            {
+                if (i > 0) tooltip.AddSeparator();
+                tooltip.AddBoldLabel(_text[i][0]);
+                for (int j = 1; j < _text[i].Count; j++)
+                    tooltip.AddDescription(_text[i][j]);
+            }
         }
         tooltip.GetPrivateField<STMG.UI.Control.ControlCollection>("main_control").Size_local = new Vector2(650, MainData.Tooltip_header);
         return tooltip;
