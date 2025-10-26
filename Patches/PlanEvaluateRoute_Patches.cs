@@ -368,12 +368,13 @@ public static class LineEvaluation
     internal static void NewEvaluation(this Line line, string header)
     {
         string _header = line.Extra().Header;
-        line.Extra().Header = _header == "?" ? header : _header + "|" + header;
+        if (!_header.Contains(header))
+            line.Extra().Header = _header == "?" ? header : _header + "|" + header;
         List<string> newEval = [$"[{DateTime.Now:HH:mm:ss}]  {header}"];
         List<List<string>> _text = line.Extra().Text;
         lock (_text)
         {
-            _text.Add(newEval);
+            _text.Insert(0, newEval);
             if (_text.Count == 4) _text.RemoveAt(3); // keep only last 3 evals
         }
     }
