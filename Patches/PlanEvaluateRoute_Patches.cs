@@ -106,7 +106,8 @@ public static class PlanEvaluateRoute_Patches
 
         // Evaluation toolip & debug logging
 #pragma warning disable CS8602 // Dereference of a possibly null reference.
-        string header = $"{company.ID}-{line.ID + 1}-{scene.Cities[manager.Hub.City].User.Name}";
+        string header = $"{company.ID}-{line.ID + 1}";
+        if (manager != null) header += $"-{scene.Cities[manager.Hub.City].User.Name}";
 #pragma warning restore CS8602 // Dereference of a possibly null reference.
         line.NewEvaluation(header);
         header = $"[{header}] ";
@@ -193,7 +194,7 @@ public static class PlanEvaluateRoute_Patches
             {
                 VehicleBaseUser vehicle = vehs[i];
                 if (vehicle.Entity_base.Tier >= optTier) continue; // do not upgrade if we reached optimal tier - this will allow to add new before upgrading to T6
-                VehicleBaseEntity? upgrade = __instance.CallPrivateMethod<VehicleBaseEntity>("GetUpgrade", [company, vehicle, manager, range]);
+                VehicleBaseEntity? upgrade = __instance.CallPrivateMethod<VehicleBaseEntity>("GetUpgrade", [company, vehicle, manager!, range]);
                 if (upgrade == null) continue; // get next one
                 //{
                     // LOGIC
@@ -205,7 +206,8 @@ public static class PlanEvaluateRoute_Patches
                 if (price <= 0L) price = 1L;
                 decimal weight = __instance.CallPrivateMethod<long>("GetBalance", [vehicle]) * 2;
                 LogDecision("UPGRADE", vehicle, upgrade);
-                manager.AddNewPlan(new GeneratedPlan(weight / (decimal)price, settings, price, vehicle));
+                if (manager != null) manager.AddNewPlan(new GeneratedPlan(weight / (decimal)price, settings, price, vehicle));
+                else company.AI.AddNewPlan(new GeneratedPlan(weight / (decimal)price, settings, price, vehicle));
                 vehicleGap -= GapPerUpgrade;
                 numUpgrades++;
                 //}
@@ -236,7 +238,8 @@ public static class PlanEvaluateRoute_Patches
             //if (best.Hub.Full())
             //price += best.Hub.GetNextLevelPrice(scene.Session); // Covered by GenPlan.Apply
             LogDecision("ADDNEW", best, newVehicle);
-            manager.AddNewPlan(new GeneratedPlan(1m, settings, price, null)); // no vehicle to sell
+            if (manager != null) manager.AddNewPlan(new GeneratedPlan(1m, settings, price, null)); // no vehicle to sell
+            else company.AI.AddNewPlan(new GeneratedPlan(1m, settings, price, null));
             MarkLineAsEvaluated();
             return false;
         }
@@ -268,7 +271,8 @@ public static class PlanEvaluateRoute_Patches
                 // 2025-10-25 When downgrading it is possible to get price=0, so weight cannot be derived from that;
                 if (price <= 0L) price = 1L;
                 decimal weight = __instance.CallPrivateMethod<long>("GetBalance", [vehicle]) * 2 / (decimal)price;
-                manager.AddNewPlan(new GeneratedPlan(weight, settings, price, vehicle));
+                if (manager != null) manager.AddNewPlan(new GeneratedPlan(weight, settings, price, vehicle));
+                else company.AI.AddNewPlan(new GeneratedPlan(weight, settings, price, vehicle));
                 //});
                 MarkLineAsEvaluated();
                 return false;

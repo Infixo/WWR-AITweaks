@@ -30,6 +30,8 @@ Currently only one feature is implemented - better logic for evaluating and main
 - None atm.
 
 ### Changelog
+- v0.3.4 (2025-10-28)
+  - Fixed crash when AI evaluates a line.
 - v0.3.2 & v0.3.3 (2025-10-26)
   - Fixed crash from race condition when line is served by 2+ hubs.
 - v0.3.1 (2025-10-25)
