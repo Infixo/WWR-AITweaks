@@ -4,18 +4,19 @@
 ## Features
 
 ### Maintain routes
-Currently only one feature is implemented - better logic for evaluating and maintaining lines for the Hub Manager's Maintain mode.
+Currently only one feature is implemented - better logic for evaluating and maintaining lines for the Hub Manager's Maintain mode and AI companies.
 - The line is evaluated for the last 2 months and based on efficiency, throughput and vehicles' capacities, optimal range is determined.
 - Optimal range is betwen 1/3 and 2/3 of minimum efficiency and full (100%) efficiency, where minimum efficiency is required for the line to be profitable at all.
-- Number of waiting passengers and average trip trime are also taken into consideration.
+- Number of waiting passengers and average trip time are also taken into consideration.
 - Based on the above, the manager decides if the line should be upgraded or downgraded and/or if more/less vehicles are needed.
+- Additional checks are added to make sure that last vehicle is not sold (ex. for AI).
 - (0.2) All vehicle manipulations go thorugh Generated Plan which assures that a vehicle is not sold when the replacement is not possible.
 - (0.2) Balanced line growth - manager will try for all vehicles be of similar tier.
 - (0.2) Optimal number of vehicles accounts for trip time and type of vehicles.
 - (0.2) Evaluation results can be displayed as a tooltip by UITweaks.
 - IMPORTANT NOTES.
-  - The process of upgrading/downgrading involves first selling the old one, and after that buying a new one. This logic also exists in the vanilla gamem btw. It is imperative to make sure the hub manager has enough funds to acquire a new vehicle. Otherwise, you may end up with an empty line. I recommend using Budget setting and set it to the value that allows to buy the best vehicle currently available.
-  - Only evaluation core and decision logic is changed, other supporting routines (e.g. selecting a better or worse vehicle) are still vanilla verions.
+  - The process of upgrading/downgrading vehicles involves first selling the old one, and after that buying a new one, same as in the vanilla gamem btw. It is imperative to make sure the hub manager has enough funds to acquire a new vehicle.
+  - Only evaluation core and decision logic is changed, other supporting routines (e.g. selecting a better or worse vehicle) are still vanilla versions.
 
 ### Troubleshooting
 - Output messages are logged into AITweaksLog.txt in the %TEMP% dir. Please consult me on Discord to understand the log.
@@ -30,6 +31,8 @@ Currently only one feature is implemented - better logic for evaluating and main
 - None atm.
 
 ### Changelog
+- v0.4.0 (2025-11-02)
+  - New, much faster algorithm to calculate waiting passengers.
 - v0.3.4 (2025-10-28)
   - Fixed crash when AI evaluates a line.
 - v0.3.2 & v0.3.3 (2025-10-26)
