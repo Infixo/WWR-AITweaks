@@ -308,29 +308,7 @@ public static class PlanEvaluateRoute_Patches
     [HarmonyPatch("IsBetter"), HarmonyPrefix]
     public static bool PlanEvaluateRoute_IsBetter_Prefix(PlanEvaluateRoute __instance, ref bool __result, Company company, VehicleBaseEntity original, VehicleBaseEntity next, Hub hub, int range)
     {
-        __result = false;
-        if (next.Graphics.Entity == null || !next.CanBuy(company, hub.Longitude))
-        {
-            return false;
-        }
-        if (next is PlaneEntity _plane && _plane.Range < range)
-        {
-            return false;
-        }
-        if (original is TrainEntity _o && next is TrainEntity _n)
-        {
-            if (_n.Tier > _o.Tier || (_n.Tier == _o.Tier && _n.Max_capacity > _o.Max_capacity))
-            {
-                __result = __instance.GetPrivateField<long>("wealth") > next.Price;
-            }
-            return false;
-        }
-        if (next.Tier > original.Tier || (next.Tier == original.Tier && next.Capacity > original.Capacity))
-        {
-            // price will be checked against wealth during command execution, as long as there are available vehicles we should try to get one
-            __result = true; //  __instance.GetPrivateField<long>("wealth") > next.Price;
-            //return false;
-        }
+        __result = original.IsBetter(company, next, hub, range);
         return false;
     }
 
