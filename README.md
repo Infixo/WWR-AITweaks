@@ -31,6 +31,8 @@ Currently only one feature is implemented - better logic for evaluating and main
 - None atm.
 
 ### Changelog
+- v0.4.1 (2025-11-06)
+  - Fixed waiting passengers calculations not including lines through overcrowded cities.
 - v0.4.0 (2025-11-02)
   - New, much faster algorithm to calculate waiting passengers.
 - v0.3.4 (2025-10-28)
