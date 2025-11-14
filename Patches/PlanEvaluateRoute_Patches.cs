@@ -65,25 +65,25 @@ public static class PlanEvaluateRoute_Patches
         // Get station wait time
         switch (line.Vehicle_type)
         {
-            case 0: calcParams = (MainData.Defaults.Bus_station_time, 10f, 1f); break; // bus
-            case 1: calcParams = (MainData.Defaults.Train_station_time, 6f, 0.25f); break; // train
-            case 2: calcParams = (MainData.Defaults.Plane_airport_time, 4f, 1.5f); break; // plane
+            case 0: calcParams = (MainData.Defaults.Bus_station_time, 6f, 1f); break; // bus
+            case 1: calcParams = (MainData.Defaults.Train_station_time, 4f, 0.25f); break; // train
+            case 2: calcParams = (MainData.Defaults.Plane_airport_time, 3f, 1.5f); break; // plane
             case 3: calcParams = (MainData.Defaults.Ship_port_time, 2.5f, 0.5f); break; // ship, 2 for large, 3 for medium/small
         }
         float travelTime = (distance / evaluation.AvgSpeed + (float)(numStops - 1) * (float)calcParams.stationTime / 3600f);
         float numTrips = line.Instructions.Cyclic ? 24f / travelTime : 12f / travelTime;
-        float months = 1f + (float)scene.Session.Second / 86400f; // TODO: 2 is related to GetSum(3) - we use 2 full months and a fraction of the current one
-        float monthlyThroughput = (float)evaluation.throughput_max / months;
-        float perVehicle = monthlyThroughput / (float)vehs.Length;
-        float waitingFraction = (float)waiting * ((float)vehs.Length / (float)line.Routes.Count);
-        float waitPerTrip = waitingFraction / numTrips;
-        float vehicleGap = waitPerTrip / perVehicle;
+        float months = 2f + (float)scene.Session.Second / 86400f; // TODO: 2 is related to GetSum(3) - we use 2 full months and a fraction of the current one
+        float monthlyThroughput = (float)evaluation.throughput_now / months;
+        float perVehicle = monthlyThroughput / (float)vehs.Length; // 20251109 This is per vehicle MONTHLY!
+        float waitingFraction = (float)waiting * ((float)vehs.Length / (float)line.Routes.Count); // This is to handle multiple hubs on a single line (which are processed each separately)
+        //float waitPerTrip = waitingFraction / numTrips 20251109 Divide by numTrips is wrong because vehicle throughput is monthly; optimally there should be enough passengers waiting to supply the line fully at any time
+        float vehicleGap = Math.Max((waitingFraction - monthlyThroughput) / perVehicle, 0f); // One month is needed to keep the flow, gap is excess
         evaluation.gap = vehicleGap;
 
         // optimal number vehicles
         float fOptimal = (float)line.Instructions.Cities.Length * calcParams.cities;
         fOptimal += calcParams.frequency * travelTime / 12f;
-        int optimal = Math.Max((int)(fOptimal+0.5f), 2);
+        int optimal = Math.Min(Math.Max((int)(fOptimal+0.5f), 2), 10); // If 10 is not enough, more will be added anyway; it prevents having a ton of low-level vehicles
 
         // optimal tier
         int optTier = 1 + vehicles.Sum(v => v.Entity_base.Tier) / vehicles.Length;
@@ -134,8 +134,8 @@ public static class PlanEvaluateRoute_Patches
         LogEvalLine($"START n={vehs.Length}/{line.Routes.Count} opt={fOptimal:F1}xT{optTier} b={GetBalanceTxt(evaluation.balance)} p={GetBalanceTxt(evaluation.profitability)}");
         LogEvalLine($"line {distance:F0}km +{numStops} {evaluation.AvgSpeed:F0}kmh {travelTime:F1}h {numTrips:F1}tr");
         LogEvalLine($"thru min={eMin:F1}% {evaluation.throughput_min}/{evaluation.throughput_now}/{evaluation.throughput_max} w={waiting}");
-        LogEvalLine($"eval {evaluation.throughput_now * 100m / evaluation.throughput_max:F1}% ({eMin + eThird:F1}-{eMin + eThird * 2:F1}) gap={vehicleGap:F2} {upDown}");
-        LogEvalLine($"vgap {months:F2}m {monthlyThroughput:F0}/m {perVehicle:F0}/v wf={waitingFraction:F0} {waitPerTrip:F0}/tr");
+        LogEvalLine($"vgap {months:F2}m {monthlyThroughput:F0}/m {perVehicle:F0}/v wf={waitingFraction:F0} gap={vehicleGap:F2}");
+        LogEvalLine($"eval {evaluation.throughput_now * 100m / evaluation.throughput_max:F1}% ({eMin + eThird:F1}-{eMin + eThird * 2:F1}) {upDown}");
         for (int i = 0; i < vehs.Length; i++)
             if (i < 2 || i > vehs.Length - 3)
                 LogEvalLine($"{i+1}. {vehs[i].ID}-{vehs[i].Entity_base.Tier}-{vehs[i].Entity_base.Translated_name} {vehs[i].Efficiency.GetSumAverage(2)}% b={GetBalanceTxt(vehs[i].Balance.GetSum(2))} s={vehs[i].stops} e={vehs[i].evaluated_on}");
@@ -184,8 +184,8 @@ public static class PlanEvaluateRoute_Patches
         }
 
         // Scenario: Upgrade existing
-        const float GapPerUpgrade = 1.25f; // PARAM: 1f gap per upgrade, could be higher / lower
-        if (evaluation.Upgrade && (vehs.Length >= optimal || evaluation.gap > 2f * GapPerUpgrade))
+        const float GapPerUpgrade = 0.5f; // PARAM: 1f gap per upgrade, could be higher / lower
+        if (evaluation.Upgrade && vehs.Length >= optimal) // || evaluation.gap > 2f * GapPerUpgrade))
         {
             int maxUpgrades = Math.Max(1, (int)(evaluation.gap / GapPerUpgrade)); // ... but at least 1 upgrade
             int numUpgrades = 0; // how many upgrades are scheduled

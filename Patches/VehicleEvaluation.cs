@@ -49,15 +49,15 @@ public struct VehicleEvaluation
             decimal third = (throughput_max - throughput_min) / 3;
             decimal treshold = throughput_max - third; // 2/3 of min-max gap
             if (throughput_now > treshold) // There are vehicles that need 80% to be even profitable; probably could relate to difficulty
-                if (balance > profitability / 5 || gap > 0.5f)
+                if (balance > profitability / 3 || gap > 0.5f)
                     return true;
             treshold = throughput_min + third; // 1/3 of min-max gap
-            if (throughput_now > treshold && gap > 0.75f)
-                if (balance > profitability / 3) // this should relate to vehicle's innate profitability
+            if (throughput_now > treshold && gap > 1.0f)
+                if (balance > profitability / 4) // this should relate to vehicle's innate profitability
                     return true;
-            if (throughput_now > throughput_min && gap > 1.5f && balance > profitability / 4)
+            if (throughput_now > throughput_min && gap > 1.5f && balance > profitability / 5)
                 return true;
-            return gap > 2.5f && balance > 0;
+            return gap > 3.0f && balance > 0;
         }
     }
 
@@ -94,7 +94,7 @@ public struct VehicleEvaluation
         long profit = vehicle.Entity_base.GetEstimatedProfit();
         sumSpeed += vehicle.Entity_base.Speed;
         sumCapacity += maxCap * vehicle.Entity_base.Speed;
-        for (int offset = 0; offset < 2 && offset < vehicle.Balance.Months; offset++)
+        for (int offset = 0; offset < 3 && offset < vehicle.Balance.Months; offset++)
         {
             balance += vehicle.Balance.GetOffset(offset);
             profitability += profit;
