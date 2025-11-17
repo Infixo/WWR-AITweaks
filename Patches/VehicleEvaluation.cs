@@ -61,32 +61,12 @@ public struct VehicleEvaluation
         }
     }
 
-    public VehicleEvaluation(VehicleBaseUser vehicle)
-    {
-        balance = 0L;
-        throughput_now = default(decimal);
-        throughput_min = default(decimal);
-        throughput_max = default(decimal);
-        samples = 0;
-        profitability = 0;
-        Evaluate(vehicle);
-    }
-
-    public void Remove(VehicleEvaluation eval)
-    {
-        throughput_min -= eval.throughput_min;
-        throughput_max -= eval.throughput_max;
-        balance -= eval.balance;
-        throughput_now -= eval.throughput_now; // was missing?
-        profitability -= eval.profitability;
-        samples--;
-    }
 
     // Step 2 Assess the line
     // Calculate: throughput min/ now / max, profitability, balance change, total balance
     // Do NOT use average, use simple sum. Since all is extrapolated via min_cap and max_cap.It will simply evaluate the last 2 months performance in total,
     // not average. This will eliminate "10 days" problem.
-    public void Evaluate(VehicleBaseUser vehicle)
+    public void Evaluate(VehicleBaseUser vehicle, int months)
     {
         samples++;
         int maxCap = ((vehicle.Entity_base is TrainEntity _train) ? _train.Max_capacity : vehicle.Entity_base.Capacity);
@@ -94,7 +74,8 @@ public struct VehicleEvaluation
         long profit = vehicle.Entity_base.GetEstimatedProfit();
         sumSpeed += vehicle.Entity_base.Speed;
         sumCapacity += maxCap * vehicle.Entity_base.Speed;
-        for (int offset = 0; offset < 3 && offset < vehicle.Balance.Months; offset++)
+        // 3 months for AI because current is always 0, and 2 months for managers
+        for (int offset = 0; offset < months && offset < vehicle.Balance.Months; offset++)
         {
             balance += vehicle.Balance.GetOffset(offset);
             profitability += profit;

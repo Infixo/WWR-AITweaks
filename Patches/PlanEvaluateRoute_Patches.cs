@@ -52,7 +52,7 @@ public static class PlanEvaluateRoute_Patches
 
         VehicleEvaluation evaluation = default;
         for (int i = 0; i < vehs.Length; i++)
-            evaluation.Evaluate(vehs[i]);
+            evaluation.Evaluate(vehs[i], manager != null ? 2 : 3); // 3 months for AI because current is always 0, and 2 months for managers
 
         Line line = scene.Session.Companies[vehs[0].Company].Line_manager.GetLine(vehs[0]);
         int waiting = (int)line.GetWaiting();
@@ -65,19 +65,19 @@ public static class PlanEvaluateRoute_Patches
         // Get station wait time
         switch (line.Vehicle_type)
         {
-            case 0: calcParams = (MainData.Defaults.Bus_station_time, 6f, 1f); break; // bus
-            case 1: calcParams = (MainData.Defaults.Train_station_time, 4f, 0.25f); break; // train
+            case 0: calcParams = (MainData.Defaults.Bus_station_time, 5f, 1f); break; // bus
+            case 1: calcParams = (MainData.Defaults.Train_station_time, 3f, 0.35f); break; // train
             case 2: calcParams = (MainData.Defaults.Plane_airport_time, 3f, 1.5f); break; // plane
-            case 3: calcParams = (MainData.Defaults.Ship_port_time, 2.5f, 0.5f); break; // ship, 2 for large, 3 for medium/small
+            case 3: calcParams = (MainData.Defaults.Ship_port_time, 1.5f, 0.5f); break; // ship, 2 for large, 3 for medium/small
         }
         float travelTime = (distance / evaluation.AvgSpeed + (float)(numStops - 1) * (float)calcParams.stationTime / 3600f);
         float numTrips = line.Instructions.Cyclic ? 24f / travelTime : 12f / travelTime;
-        float months = 2f + (float)scene.Session.Second / 86400f; // TODO: 2 is related to GetSum(3) - we use 2 full months and a fraction of the current one
+        float months = manager != null ? 1f + (float)scene.Session.Second / 86400f : 2f; // AI always evaluates at the begining of the month, there is no fraction
         float monthlyThroughput = (float)evaluation.throughput_now / months;
         float perVehicle = monthlyThroughput / (float)vehs.Length; // 20251109 This is per vehicle MONTHLY!
         float waitingFraction = (float)waiting * ((float)vehs.Length / (float)line.Routes.Count); // This is to handle multiple hubs on a single line (which are processed each separately)
         //float waitPerTrip = waitingFraction / numTrips 20251109 Divide by numTrips is wrong because vehicle throughput is monthly; optimally there should be enough passengers waiting to supply the line fully at any time
-        float vehicleGap = Math.Max((waitingFraction - monthlyThroughput) / perVehicle, 0f); // One month is needed to keep the flow, gap is excess
+        float vehicleGap = waitingFraction / perVehicle;
         evaluation.gap = vehicleGap;
 
         // optimal number vehicles
