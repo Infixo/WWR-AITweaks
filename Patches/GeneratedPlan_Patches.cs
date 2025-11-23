@@ -31,7 +31,7 @@ public static  class GeneratedPlan_Patches
 
     // Perform as many checks as possible before selling a vehicle!
     [HarmonyPatch("Apply"), HarmonyPrefix]
-    public static bool GeneratedPlan_Apply_Prefix(GeneratedPlan __instance, ref bool __result, Company company, GameScene scene, HubManager manager /*= null*/)
+    public static bool GeneratedPlan_Apply_Prefix(GeneratedPlan __instance, ref bool __result, Company company, GameScene scene, HubManager manager /*= null*/, RoadRoute ___road)
     {
         __result = false; // this will keep the plan, only true removes the plan
 
@@ -85,6 +85,11 @@ public static  class GeneratedPlan_Patches
         // Check infrastructure
         if ((_vehicle is TrainEntity && !__instance.CallPrivateMethod<bool>("InfrastructureIsReady", [company, scene, false, manager!])) || (_vehicle is RoadVehicleEntity && !__instance.CallPrivateMethod<bool>("InfrastructureIsReady", [company, scene, true, manager!])))
         {
+            // Patch 1.1.15
+            if (___road != null)
+            {
+                return ___road.Road.Length == 0;
+            }
             return false;
         }
 

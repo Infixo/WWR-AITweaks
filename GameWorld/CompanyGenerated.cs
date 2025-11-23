@@ -59,37 +59,48 @@ public static class CompanyGenerated_Patches
         }
         */
 
+        // Patch 1.1.15 - any vehicle combination can be set when starting a game
+        CompanyType _allowed = (CompanyType)session.Scene.Settings.Vehicles_flag;
+
         // Type.ALL
         if (company_type.HasValue)
         {
-            //string _name = __instance.GetName(_hash, country, session, company_type.Value, ref _sub);
-            //__result = new CompanyGenerated(country, _name, _sub, company_type.Value, _color_main, GetRandomColor(_hash, 200), _logo);
-            if (company_type.Value == CompanyType.All && _hash.NextInt() % 100 < 25)
+            if (company_type.Value == CompanyType.All)
             {
-                int _type = (int)company_type.Value;
-                int _mask = 1 << (_hash.NextInt() % 4);
-                _type ^= _mask;
-                company_type = (CompanyType)_type;
-                //TestRandom(_hash);
+                company_type = _allowed;
+                if (_allowed == CompanyType.All && _hash.NextInt() % 100 < 25)
+                {
+                    int _type = (int)company_type.Value;
+                    int _mask = 1 << (_hash.NextInt() % 4);
+                    _type ^= _mask;
+                    company_type = (CompanyType)_type;
+                }
             }
             __result = GetCompany(company_type.Value);
             return false;
         }
 
         // Randomly generated company type
-        int _h = _hash.NextInt() % 100;
-        if (_h > 83)
-            __result = GetCompany(CompanyType.Ships|CompanyType.Planes);
-        else if (_h > 66)
-            __result = GetCompany(CompanyType.Ships);
-        else if (_h > 49)
-            __result = GetCompany(CompanyType.Planes);
-        else if (_h > 33)
-            __result = GetCompany(CompanyType.Trains|CompanyType.Road_vehicles);
-        else if (_h > 16)
-            __result = GetCompany(CompanyType.Trains);
-        else
-            __result = GetCompany(CompanyType.Road_vehicles);
+        company_type = 0;
+        int _tries = 10; // Limit random rolls in case of some stupid RNG
+        while (company_type.Value == 0 && _tries-- > 0)
+        {
+            int _h = _hash.NextInt() % 100;
+            if (_h > 83)
+                company_type = CompanyType.Ships | CompanyType.Planes;
+            else if (_h > 66)
+                company_type = CompanyType.Ships;
+            else if (_h > 50)
+                company_type = CompanyType.Planes;
+            else if (_h > 33)
+                company_type = CompanyType.Trains | CompanyType.Road_vehicles;
+            else if (_h > 16)
+                company_type = CompanyType.Trains; // It looks like starting with trains only is simply impossible for AI, rails are too expensive?
+            else
+                company_type = CompanyType.Road_vehicles;
+            company_type &= _allowed;
+        }
+        __result = GetCompany(_tries > 0 ? company_type.Value : _allowed);
         return false;
 
         // Helpers
@@ -113,7 +124,7 @@ public static class CompanyGenerated_Patches
         {
             CompanyType.Road_vehicles => 0,
             CompanyType.Trains => _names,
-            CompanyType.Road_vehicles|CompanyType.Trains => _names * (hash.NextInt() & 1),
+            CompanyType.Road_vehicles|CompanyType.Trains => _names,
             CompanyType.Planes => _names * 2,
             CompanyType.Ships => _names * 3,
             CompanyType.Planes|CompanyType.Ships => _names * (2 + (hash.NextInt() & 1)),
@@ -181,5 +192,29 @@ public static class CompanyGenerated_Patches
             freq[hash.NextInt() % 20]++;
         for (int i = 0; i <  freq.Length; i++)
             Log.Write($"{i}: {freq[i]}");
+    }
+
+    // For debug and testing purposes
+    //[HarmonyPatch(typeof(Session), "GetCompanies"), HarmonyPostfix]
+    public static void Session_GetCompanies(Session __instance)
+    {
+        void GetCompany(CompanyType type, ref int _tot, float prob)
+        {
+            int _count = 0;
+            for (int i = 0; i < __instance.Companies.Count; i++)
+                if (__instance.Companies[i].Info is CompanyGenerated _comp && _comp.Company_type == type)
+                    _count++;
+            Log.Write($"{_count} ({prob*(float)(__instance.Companies.Count-1):F1}) {type}");
+            _tot += _count;
+        }
+        int _tot = 0;
+        GetCompany(CompanyType.All, ref _tot, 0.5f * 0.75f);
+        GetCompany(CompanyType.Road_vehicles, ref _tot, 0.1f);
+        GetCompany(CompanyType.Trains, ref _tot, 0); // It looks like starting with trains only is simply impossible for AI, rails are too expensive?
+        GetCompany(CompanyType.Ships, ref _tot, 0.1f);
+        GetCompany(CompanyType.Planes, ref _tot, 0.1f);
+        GetCompany(CompanyType.Trains | CompanyType.Road_vehicles, ref _tot, 0.1f);
+        GetCompany(CompanyType.Ships | CompanyType.Planes, ref _tot, 0.1f);
+        Log.Write($"{__instance.Companies.Count - 1 - _tot} ({0.5f*0.25f* (float)(__instance.Companies.Count - 1):F1}) 3-types");
     }
 }
