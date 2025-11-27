@@ -23,14 +23,18 @@ public static class PlanEvaluateRoute_Patches
     [HarmonyPatch("EvaluateLine"), HarmonyPrefix]
     public static bool PlanEvaluateRoute_EvaluateLine_Prefix(PlanEvaluateRoute __instance, Company company, VehicleBaseUser[] vehicles, GameScene scene, HubManager manager)
     {
-        if (vehicles.Length == 0) return false; // it happens!
         if (manager == null && company.AI == null) return false; // just a precaution and to simplify code later
 
         // Step 1
-        // Exclude vehicles that have not yet transported anyone (e.g. totally new lines added to hubs with managers)
-        VehicleBaseUser[] vehs = vehicles; //  [.. vehicles.ToArray().Where(v => v.Throughput.GetSum(2) > 0)];
-        //if (vehs.Length == 0 || (vehicles.Length - vehs.Length) > vehicles.Length/5) // TODO: PARAMETER
-            //return false;
+        // Exclude vehicles not eligible for evaluation
+        VehicleBaseUser[] vehs = [.. vehicles.Where(v => !v.Destroyed)];
+        if (vehs.Length == 0)
+        {
+#if LOGGING
+            Log.Write("[ERROR] No vehicles to evaluate.", false);
+#endif
+            return false;
+        }
 
         // Step 1a
         // This is to prevent repeated evals when the data has not changed i.e. vehicles has not reached destination
@@ -59,7 +63,7 @@ public static class PlanEvaluateRoute_Patches
         if (line == null)
         {
 #if LOGGING
-            Log.Write("[ERROR] Line is null", false);
+            Log.Write("[ERROR] Line is null.", false);
 #endif
             return false;
         }
@@ -94,7 +98,7 @@ public static class PlanEvaluateRoute_Patches
         int optimal = Math.Min(Math.Max((int)(fOptimal+0.5f), 2), 10); // If 10 is not enough, more will be added anyway; it prevents having a ton of low-level vehicles
 
         // optimal tier
-        int optTier = 1 + vehicles.Sum(v => v.Entity_base.Tier) / vehicles.Length;
+        int optTier = 1 + vehs.Sum(v => v.Entity_base.Tier) / vehs.Length;
 
         // Step 3 Sort vehicles in order for upgrade
         // This signature matches the Comparison<T> delegate required by Array.Sort.
