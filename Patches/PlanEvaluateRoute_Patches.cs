@@ -52,9 +52,17 @@ public static class PlanEvaluateRoute_Patches
 
         VehicleEvaluation evaluation = default;
         for (int i = 0; i < vehs.Length; i++)
-            evaluation.Evaluate(vehs[i], manager != null ? 2 : 3); // 3 months for AI because current is always 0, and 2 months for managers
+            evaluation.Evaluate(vehs[i]);
 
         Line line = scene.Session.Companies[vehs[0].Company].Line_manager.GetLine(vehs[0]);
+        // 20251127 line can be null here when buying out hubs and deleting later on (idk why, it crashed the game nonetheless)
+        if (line == null)
+        {
+#if LOGGING
+            Log.Write("[ERROR] Line is null", false);
+#endif
+            return false;
+        }
         int waiting = (int)line.GetWaiting();
 
         // Step 2a Calculate more advanced metrics
@@ -72,7 +80,7 @@ public static class PlanEvaluateRoute_Patches
         }
         float travelTime = (distance / evaluation.AvgSpeed + (float)(numStops - 1) * (float)calcParams.stationTime / 3600f);
         float numTrips = line.Instructions.Cyclic ? 24f / travelTime : 12f / travelTime;
-        float months = manager != null ? 1f + (float)scene.Session.Second / 86400f : 2f; // AI always evaluates at the begining of the month, there is no fraction
+        float months = 1f + (float)scene.Session.Second / 86400f;
         float monthlyThroughput = (float)evaluation.throughput_now / months;
         float perVehicle = monthlyThroughput / (float)vehs.Length; // 20251109 This is per vehicle MONTHLY!
         float waitingFraction = (float)waiting * ((float)vehs.Length / (float)line.Routes.Count); // This is to handle multiple hubs on a single line (which are processed each separately)
@@ -216,7 +224,7 @@ public static class PlanEvaluateRoute_Patches
             // original stop: upgrade done and vehs>=optimal -> not enough if gap is still big?
             bool addNew = false;
             if (numUpgrades == 0) addNew = true;
-            else if (vehs.Length < optimal && vehicleGap > 1f) addNew = true;
+            else if (vehs.Length < optimal && vehicleGap > GapPerUpgrade) addNew = true;
             if (!addNew)
             {
                 MarkLineAsEvaluated();
