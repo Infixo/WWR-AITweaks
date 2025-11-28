@@ -2,9 +2,11 @@
 [Worldwide Rush](https://store.steampowered.com/app/3325500/Worldwide_Rush/) mod that adds some AI enhancements to the game.
 
 ## Features
+- Rewritten and redesigned line evaluation algorithm.
+- More diversity in AI companies.
 
-### Maintain routes
-Currently only one feature is implemented - better logic for evaluating and maintaining lines for the Hub Manager's Maintain mode and AI companies.
+### Line evaluation
+Better logic for evaluating and maintaining lines for the Hub Manager's Maintain mode and AI companies.
 - The line is evaluated for the last 2 months and based on efficiency, throughput and vehicles' capacities, optimal range is determined.
 - Optimal range is betwen 1/3 and 2/3 of minimum efficiency and full (100%) efficiency, where minimum efficiency is required for the line to be profitable at all.
 - Number of waiting passengers and average trip time are also taken into consideration.
@@ -14,9 +16,16 @@ Currently only one feature is implemented - better logic for evaluating and main
 - (0.2) Balanced line growth - manager will try for all vehicles be of similar tier.
 - (0.2) Optimal number of vehicles accounts for trip time and type of vehicles.
 - (0.2) Evaluation results can be displayed as a tooltip by UITweaks.
+- (0.5) AI companies evaluate lines twice a month (instead of once).
 - IMPORTANT NOTES.
   - The process of upgrading/downgrading vehicles involves first selling the old one, and after that buying a new one, same as in the vanilla gamem btw. It is imperative to make sure the hub manager has enough funds to acquire a new vehicle.
   - Only evaluation core and decision logic is changed, other supporting routines (e.g. selecting a better or worse vehicle) are still vanilla versions.
+
+### (0.5) More diversity in AI companies
+AI companies now have a chance to be
+- Land-only: road vehicles + trains.
+- Non-land: planes and ships.
+- Any combination of 3 types.
 
 ### Troubleshooting
 - Output messages are logged into AITweaksLog.txt in the %TEMP% dir. Please consult me on Discord to understand the log.
@@ -31,6 +40,14 @@ Currently only one feature is implemented - better logic for evaluating and main
 - None atm.
 
 ### Changelog
+- v0.5.0 (2025-11-28)
+  - NEW feature. More diversity in AI companies.
+  - Allows AI to buy any number of vehicles (within inventory limits).
+  - AI evaluates lines twice per month (originally onl once).
+  - Various small improvements in the line evaluation algorithm.
+  - Compatibility with Patch 1.1.15.
+  - Fixed AI behavior allowing for super long road routes and very short plane routes.
+  - Fixed AI taking loans over 10M limit.
 - v0.4.1 (2025-11-06)
   - Fixed waiting passengers calculations not including lines through overcrowded cities.
 - v0.4.0 (2025-11-02)
