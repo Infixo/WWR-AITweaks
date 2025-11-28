@@ -6,13 +6,9 @@ using STM.GameWorld.AI;
 using STM.GameWorld.Commands;
 using STM.GameWorld.Users;
 using STVisual.Utility;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using Utilities;
 
-namespace AITweaks.Patches;
+namespace AITweaks.GameWorld;
 
 
 [HarmonyPatch(typeof(GeneratedPlan))]

@@ -1,7 +1,8 @@
 using STM.Data.Entities;
 using STM.GameWorld.Users;
 
-namespace AITweaks.Patches;
+namespace AITweaks.GameWorld;
+
 
 public struct VehicleEvaluation
 {
