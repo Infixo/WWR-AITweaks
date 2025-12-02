@@ -40,6 +40,9 @@ AI companies now have a chance to be
 - None atm.
 
 ### Changelog
+- v0.5.1 (2025-12-02)
+  - Fixed some annoying pathing problems, like no-return-route.
+  - AI uses only big ships for very long ship routes (>4000km).
 - v0.5.0 (2025-11-28)
   - NEW feature. More diversity in AI companies.
   - Allows AI to buy any number of vehicles (within inventory limits).
