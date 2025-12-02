@@ -43,7 +43,7 @@ AI companies now have a chance to be
 - v0.5.0 (2025-11-28)
   - NEW feature. More diversity in AI companies.
   - Allows AI to buy any number of vehicles (within inventory limits).
-  - AI evaluates lines twice per month (originally onl once).
+  - AI evaluates lines twice per month (unmodded only once).
   - Various small improvements in the line evaluation algorithm.
   - Compatibility with Patch 1.1.15.
   - Fixed AI behavior allowing for super long road routes and very short plane routes.

@@ -128,9 +128,17 @@ public static class PlanSearchForAVehicle_Patches
             {
                 _weight *= 1.5m;
             }
-            else if (___v_distance > 800)
+            else if (___v_distance > 4000)
             {
                 if (entity.Capacity * 10 < ___v_distance)
+                {
+                    return false;
+                }
+                _weight *= 0.5m;
+            }
+            else if (___v_distance > 800)
+            {
+                if (entity.Capacity * 5 < ___v_distance)
                 {
                     return false;
                 }
