@@ -4,6 +4,9 @@ using STM.GameWorld;
 namespace AITweaks.Patches;
 
 
+// 2025-12-17 Fixed in v1.2.0 of the game, no longer needed.
+// 2025-12-23 v1.2.1 again introduces asymmetry, so enabled again.
+
 [HarmonyPatch]
 public static class PathSearchFix
 {
