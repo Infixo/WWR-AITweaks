@@ -88,8 +88,17 @@ public struct VehicleEvaluation
                 {
                     throughput_now += (decimal)throughput;
                     throughput = throughput * 100 / _efficiency; // calculate max from efficiency
-                    throughput_max += (decimal)throughput;
-                    throughput_min += (decimal)(throughput * minCap / maxCap); // calculate min from capacities ratio
+                    if (throughput > 0)
+                    {
+                        throughput_max += (decimal)throughput;
+                        throughput_min += (decimal)(throughput * minCap / maxCap); // calculate min from capacities ratio
+                    }
+                    // 2025-12-27 Very rare case when throughput is so low that max cannot be calculated
+                    else
+                    {
+                        throughput_max += (decimal)maxCap;
+                        throughput_min += (decimal)minCap;
+                    }
                 }
                 // 2025-10-17 Fix for a very rare case where both efficiency and throughput are 0, but not at the same time
                 else  // (_efficiency == 0)

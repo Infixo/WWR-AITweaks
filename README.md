@@ -40,6 +40,8 @@ AI companies now have a chance to be
 - None atm.
 
 ### Changelog
+- v0.5.3 (2025-12-27)
+  - Fixed a crash when in some rare cases maximum throughput yields 0.
 - v0.5.2 (2025-12-23)
   - Updated for Patch 1.2.1.
 - v0.5.1 (2025-12-02)
